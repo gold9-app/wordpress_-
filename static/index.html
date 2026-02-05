@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>메디셜 블로그 발행</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1a73e8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', -apple-system, sans-serif;
+      background: #f5f7fa;
+      color: #333;
+      min-height: 100vh;
+    }
+    .header {
+      background: linear-gradient(135deg, #1a73e8, #0d47a1);
+      color: white;
+      padding: 24px 32px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .header h1 { font-size: 22px; font-weight: 600; }
+    .header p { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+    .container { max-width: 800px; margin: 24px auto; padding: 0 16px; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 12px;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+    .card-body { padding: 20px; }
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+    .badge-ok { background: #e8f5e9; color: #2e7d32; }
+    .badge-err { background: #fce4ec; color: #c62828; }
+    .badge-kw { background: #e3f2fd; color: #1565c0; }
+    .card-info {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 12px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .card-info span { display: flex; align-items: center; gap: 4px; }
+    .card-actions { display: flex; gap: 8px; }
+    .btn {
+      padding: 8px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-publish {
+      background: #1a73e8;
+      color: white;
+    }
+    .btn-publish:hover:not(:disabled) { background: #1557b0; }
+    .btn-draft {
+      background: #f1f3f4;
+      color: #333;
+    }
+    .btn-draft:hover:not(:disabled) { background: #e0e2e4; }
+    .btn-all {
+      background: #0d47a1;
+      color: white;
+      padding: 12px 28px;
+      font-size: 15px;
+    }
+    .btn-all:hover:not(:disabled) { background: #092e6b; }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .toolbar-left { font-size: 14px; color: #666; }
+    .status-msg {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-top: 8px;
+      font-size: 13px;
+      display: none;
+    }
+    .status-ok { display: block; background: #e8f5e9; color: #2e7d32; }
+    .status-err { display: block; background: #fce4ec; color: #c62828; }
+    .status-loading { display: block; background: #e3f2fd; color: #1565c0; }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #1a73e8;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+    .empty p { margin-top: 8px; font-size: 14px; }
+    .result-link {
+      color: #1a73e8;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .result-link:hover { text-decoration: underline; }
+    .refresh-btn {
+      background: none;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #666;
+    }
+    .refresh-btn:hover { background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>메디셜 블로그 자동 발행</h1>
+    <p>publish 폴더에 글을 넣고 발행하세요</p>
+  </div>
+
+  <div class="container">
+    <div class="toolbar">
+      <span class="toolbar-left" id="folderCount"></span>
+      <button class="refresh-btn" onclick="loadFolders()">새로고침</button>
+    </div>
+    <div id="folderList"></div>
+  </div>
+
+  <script>
+    let folders = [];
+
+    async function loadFolders() {
+      const list = document.getElementById('folderList');
+      const count = document.getElementById('folderCount');
+      list.innerHTML = '<div class="empty"><div class="spinner"></div> 불러오는 중...</div>';
+
+      try {
+        const resp = await fetch('/api/folders');
+        folders = await resp.json();
+      } catch (e) {
+        list.innerHTML = '<div class="empty">서버 연결 실패</div>';
+        return;
+      }
+
+      if (folders.length === 0) {
+        list.innerHTML = '<div class="empty"><p>publish 폴더에 글 폴더를 넣어주세요</p></div>';
+        count.textContent = '';
+        return;
+      }
+
+      const validCount = folders.filter(f => f.valid).length;
+      count.textContent = `총 ${folders.length}개 / 발행 가능 ${validCount}개`;
+
+      let html = '';
+      folders.forEach((f, i) => {
+        const statusBadge = f.valid
+          ? '<span class="badge badge-ok">준비됨</span>'
+          : '<span class="badge badge-err">' + f.errors.join(', ') + '</span>';
+
+        const kwBadge = f.focus_keyword
+          ? `<span class="badge badge-kw">${f.focus_keyword}</span>`
+          : '';
+
+        const info = [];
+        if (f.html) info.push(`<span>${f.html}</span>`);
+        if (f.image) info.push(`<span>${f.image}</span>`);
+        if (f.has_meta) info.push('<span>meta.json</span>');
+
+        const buttons = f.valid
+          ? `<div class="card-actions">
+               <button class="btn btn-publish" onclick="publish(${i}, 'publish')">발행</button>
+               <button class="btn btn-draft" onclick="publish(${i}, 'draft')">임시글</button>
+             </div>`
+          : '';
+
+        html += `
+          <div class="card" id="card-${i}">
+            <div class="card-body">
+              <div class="card-title">${f.name} ${statusBadge} ${kwBadge}</div>
+              <div class="card-info">${info.join('')}</div>
+              ${buttons}
+              <div class="status-msg" id="status-${i}"></div>
+            </div>
+          </div>`;
+      });
+
+      if (validCount > 1) {
+        html += `
+          <div style="text-align:center; margin: 20px 0;">
+            <button class="btn btn-all" onclick="publishAll('publish')">전체 발행</button>
+            <button class="btn btn-draft" style="padding:12px 28px; font-size:15px;" onclick="publishAll('draft')">전체 임시글</button>
+          </div>`;
+      }
+
+      list.innerHTML = html;
+    }
+
+    async function publish(index, status) {
+      const f = folders[index];
+      const statusEl = document.getElementById(`status-${index}`);
+      const card = document.getElementById(`card-${index}`);
+      const buttons = card.querySelectorAll('.btn');
+      buttons.forEach(b => b.disabled = true);
+
+      statusEl.className = 'status-msg status-loading';
+      statusEl.innerHTML = '<span class="spinner"></span> 발행 중...';
+
+      try {
+        const resp = await fetch('/api/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: f.name, status }),
+        });
+        const data = await resp.json();
+
+        if (data.ok) {
+          statusEl.className = 'status-msg status-ok';
+          statusEl.innerHTML = `발행 완료! <a class="result-link" href="${data.url}" target="_blank">${data.url}</a>`;
+        } else {
+          statusEl.className = 'status-msg status-err';
+          statusEl.textContent = data.error;
+          buttons.forEach(b => b.disabled = false);
+        }
+      } catch (e) {
+        statusEl.className = 'status-msg status-err';
+        statusEl.textContent = '서버 오류';
+        buttons.forEach(b => b.disabled = false);
+      }
+    }
+
+    async function publishAll(status) {
+      for (let i = 0; i < folders.length; i++) {
+        if (folders[i].valid) {
+          await publish(i, status);
+        }
+      }
+    }
+
+    loadFolders();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js');
+    }
+  </script>
+</body>
+</html>
