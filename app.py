@@ -109,19 +109,13 @@ def inject_external_link(html_content, author_id, custom_link=""):
 
 
 def inject_internal_link(html_content, internal_link):
-    """내부 링크를 본문 중간에 삽입 (첫 번째 </p> 태그 뒤)"""
+    """내부 링크를 글 맨 마지막에 삽입"""
     if not internal_link:
         return html_content
     link_html = (
-        f'<p>관련 글: <a href="{internal_link}">{internal_link}</a></p>'
+        f'<p>또 보면 좋은 글: <a href="{internal_link}">{internal_link}</a></p>'
     )
-    # 첫 번째 </p> 뒤에 삽입
-    match = re.search(r"</p>", html_content, re.IGNORECASE)
-    if match:
-        pos = match.end()
-        return html_content[:pos] + "\n" + link_html + "\n" + html_content[pos:]
-    # </p>가 없으면 맨 앞에 삽입
-    return link_html + "\n" + html_content
+    return html_content + "\n" + link_html
 
 
 def ensure_focus_keyword_in_content(html_content, focus_keyword):
