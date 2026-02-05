@@ -81,18 +81,31 @@ def extract_focus_keyword(title):
     return keyword if keyword else title
 
 
-def inject_external_link(html_content, author_id):
-    """작성자가 응석 김(ID=4)일 때만 인스타그램 링크 삽입"""
-    if author_id != 4:
-        return html_content
-    if not AUTHOR_INSTAGRAM or "instagram.com" in html_content:
-        return html_content
-    link_html = (
-        f'<p>더 많은 건강 정보는 '
-        f'<a href="{AUTHOR_INSTAGRAM}" target="_blank">응석 김 인스타그램</a>'
-        f'에서 확인하세요.</p>'
-    )
-    return html_content + "\n" + link_html
+def inject_external_link(html_content, author_id, custom_link=""):
+    """
+    작성자가 응석 김(ID=4)이면 인스타그램 링크 자동 삽입,
+    다른 작성자는 custom_link가 있으면 삽입
+    """
+    if author_id == 4:
+        # 응석 김: 인스타그램 링크 자동
+        if not AUTHOR_INSTAGRAM or "instagram.com" in html_content:
+            return html_content
+        link_html = (
+            f'<p>더 많은 건강 정보는 '
+            f'<a href="{AUTHOR_INSTAGRAM}" target="_blank">응석 김 인스타그램</a>'
+            f'에서 확인하세요.</p>'
+        )
+        return html_content + "\n" + link_html
+    else:
+        # 다른 작성자: custom_link가 있으면 삽입
+        if not custom_link:
+            return html_content
+        link_html = (
+            f'<p>더 많은 정보는 '
+            f'<a href="{custom_link}" target="_blank">{custom_link}</a>'
+            f'에서 확인하세요.</p>'
+        )
+        return html_content + "\n" + link_html
 
 
 def ensure_focus_keyword_in_content(html_content, focus_keyword):
@@ -273,6 +286,7 @@ def api_publish():
     status = request.form.get("status", "draft")
     author_id = int(request.form.get("author_id", AUTHOR_ID))
     category_id = int(request.form.get("category_id", CATEGORY_ID))
+    external_link = request.form.get("external_link", "").strip()
     html_file = request.files.get("html_file")
     image_file = request.files.get("image_file")
 
@@ -312,7 +326,7 @@ def api_publish():
         html_content = ensure_focus_keyword_in_subheading(html_content, focus_keyword)
         if image_url:
             html_content = inject_focus_keyword_image(html_content, focus_keyword, image_url)
-        html_content = inject_external_link(html_content, author_id)
+        html_content = inject_external_link(html_content, author_id, external_link)
         wp_content = f"<!-- wp:html -->\n{html_content}\n<!-- /wp:html -->"
 
         # 글 발행

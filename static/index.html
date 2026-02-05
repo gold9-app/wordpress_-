@@ -207,7 +207,7 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">작성자</label>
-            <select class="form-select" id="authorSelect">
+            <select class="form-select" id="authorSelect" onchange="onAuthorChange()">
               <option value="">불러오는 중...</option>
             </select>
           </div>
@@ -217,6 +217,14 @@
               <option value="">불러오는 중...</option>
             </select>
           </div>
+        </div>
+
+        <!-- 외부 링크 (응석 김 제외) -->
+        <div class="form-group hidden" id="externalLinkGroup">
+          <label class="form-label">외부 링크 (선택사항)</label>
+          <input type="text" class="form-input" id="externalLinkInput"
+                 placeholder="예: https://instagram.com/yourname">
+          <div style="font-size:11px; color:#888; margin-top:4px;">글 하단에 링크가 삽입됩니다</div>
         </div>
 
         <!-- HTML 파일 -->
@@ -333,8 +341,22 @@
         catSel.innerHTML = data.categories.map(c =>
           `<option value="${c.id}" ${c.id === data.defaults.category_id ? 'selected' : ''}>${c.name}</option>`
         ).join('');
+
+        onAuthorChange();
       } catch (e) {
         console.error('옵션 로드 실패', e);
+      }
+    }
+
+    function onAuthorChange() {
+      const authorId = document.getElementById('authorSelect').value;
+      const linkGroup = document.getElementById('externalLinkGroup');
+      // 응석 김(ID=4)이면 숨김, 다른 작성자면 표시
+      if (authorId === '4') {
+        linkGroup.classList.add('hidden');
+        document.getElementById('externalLinkInput').value = '';
+      } else {
+        linkGroup.classList.remove('hidden');
       }
     }
 
@@ -397,12 +419,14 @@
 
       const authorId = document.getElementById('authorSelect').value;
       const categoryId = document.getElementById('categorySelect').value;
+      const externalLink = document.getElementById('externalLinkInput').value.trim();
 
       const formData = new FormData();
       formData.append('title', title);
       formData.append('status', status);
       formData.append('author_id', authorId);
       formData.append('category_id', categoryId);
+      formData.append('external_link', externalLink);
       formData.append('html_file', htmlFile);
       formData.append('image_file', imageFile);
 
@@ -455,6 +479,7 @@
       document.getElementById('btnPublish').disabled = false;
       document.getElementById('btnDraft').disabled = false;
       document.getElementById('resetArea').classList.add('hidden');
+      document.getElementById('externalLinkInput').value = '';
     }
 
     if ('serviceWorker' in navigator) {
