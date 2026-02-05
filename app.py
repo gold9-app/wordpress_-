@@ -20,6 +20,7 @@ WP_URL = os.getenv("WP_URL", "").rstrip("/")
 WP_USERNAME = os.getenv("WP_USERNAME", "")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
 
 SITE_NAME = os.getenv("SITE_NAME", "메디셜 공식 블로그")
 CATEGORY_ID = int(os.getenv("CATEGORY_ID", "22"))
@@ -285,6 +286,115 @@ def api_options():
                 "category_id": CATEGORY_ID,
             }
         })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건강 칼럼을 작성하는 전문 의료 콘텐츠 작성자입니다.
+
+## 작성자 정보
+- 칼럼 작성자: 항노화 김응석 박사
+- 대한줄기세포치료학회 회장
+- 국제미용항노화학회 회장
+- 대한비만건강학회 고문
+
+## 글 구조 (반드시 이 순서로 작성)
+
+### 1. 훅 (Hook)
+- 스크롤을 멈추게 하는 첫 문장
+- "이거 모르면 손해"식 궁금증 유발 또는 의외의 사실로 시작
+- 예: "커피가 간에 좋다는 거, 진짜일까요?"
+
+### 2. 공감 (Pain Point)
+- 독자가 "어, 나 얘기네?" 하는 순간
+- 흔히 겪는 증상/상황 묘사
+- 잘못 알려진 상식 언급
+
+### 3. 핵심 정보 (Main Content)
+- 의사만 알려줄 수 있는 내용
+- 소제목 + 본문으로 구성
+- 어려운 용어는 쉬운 비유로 설명
+- 숫자/데이터는 1~2개만 사용
+- 과학적 근거/메커니즘 설명
+- 구체적인 정보 (용량, 섭취 방법, 주의사항)
+- Q&A 형식으로 흔한 오해 바로잡기
+
+### 4. 실천 팁 (Actionable)
+- 오늘 당장 할 수 있는 구체적이고 쉬운 행동 1~2가지
+
+### 5. 의사의 한마디 (Trust Building)
+- 진료실에서 느낀 점, 환자분들 사례 (익명)
+- 인간적인 면 + 전문가 관점
+
+### 6. 마무리 CTA
+- 저장/공유 유도: "도움이 되셨다면 저장해두세요."
+
+### 7. 참고문헌
+- 논문 출처 포함 (마지막에 배치)
+
+## HTML 작성 규칙
+1. WordPress에 바로 사용 가능한 HTML
+2. 화려하지 않고 전문적인 느낌
+3. 모바일 최적화 (반응형)
+4. 키워드 밀도 약 2% 수준
+5. 폰트: Noto Sans KR, Malgun Gothic
+6. 깔끔한 여백과 가독성 좋은 줄간격
+7. ```html 등 마크다운 없이 순수 HTML만 출력
+8. 칼럼에 걸맞는 충분한 길이 (1500-2500자)"""
+
+
+@app.route("/api/generate-html", methods=["POST"])
+@require_auth
+def api_generate_html():
+    """Claude API로 HTML 생성"""
+    if not CLAUDE_API_KEY:
+        return jsonify({"ok": False, "error": "Claude API 키가 설정되지 않았습니다."}), 500
+
+    data = request.json
+    prompt = data.get("prompt", "").strip()
+    if not prompt:
+        return jsonify({"ok": False, "error": "요청사항을 입력해주세요."}), 400
+
+    try:
+        resp = http_requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": CLAUDE_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 8000,
+                "system": CLAUDE_SYSTEM_PROMPT,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"다음 주제로 건강 칼럼을 HTML 형식으로 작성해주세요:\n\n{prompt}"
+                    }
+                ]
+            },
+            timeout=120,
+        )
+
+        if resp.status_code != 200:
+            return jsonify({"ok": False, "error": f"Claude API 오류 (HTTP {resp.status_code})"}), 500
+
+        result = resp.json()
+        html_content = result["content"][0]["text"]
+
+        # HTML 코드블록 제거 (혹시 있을 경우)
+        html_content = html_content.strip()
+        if html_content.startswith("```html"):
+            html_content = html_content[7:]
+        if html_content.startswith("```"):
+            html_content = html_content[3:]
+        if html_content.endswith("```"):
+            html_content = html_content[:-3]
+        html_content = html_content.strip()
+
+        return jsonify({"ok": True, "html": html_content})
+
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

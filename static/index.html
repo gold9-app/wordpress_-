@@ -167,6 +167,65 @@
       color: #666;
       line-height: 1.6;
     }
+    .btn-ai {
+      background: linear-gradient(135deg, #8b5cf6, #6366f1);
+      color: white;
+    }
+    .btn-ai:hover:not(:disabled) { background: linear-gradient(135deg, #7c3aed, #4f46e5); }
+    .html-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .modal-textarea {
+      width: 100%;
+      height: 120px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      resize: vertical;
+      font-family: inherit;
+    }
+    .modal-textarea:focus { border-color: #1a73e8; outline: none; }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      justify-content: flex-end;
+    }
+    .btn-cancel {
+      background: #f1f3f4;
+      color: #333;
+    }
+    .btn-cancel:hover { background: #e0e2e4; }
   </style>
 </head>
 <body>
@@ -244,6 +303,9 @@
             <div class="drop-zone-file" id="htmlFileName"></div>
           </div>
           <input type="file" id="htmlFileInput" accept=".html,.htm" style="display:none">
+          <div class="html-actions">
+            <button type="button" class="btn btn-small btn-ai" onclick="openAiModal()">AI로 생성</button>
+          </div>
         </div>
 
         <!-- 이미지 파일 -->
@@ -270,6 +332,20 @@
     <!-- 발행 완료 후 새 글 작성 버튼 -->
     <div class="hidden" id="resetArea" style="text-align:center;">
       <button class="reset-btn" onclick="resetForm()">새 글 작성</button>
+    </div>
+  </div>
+
+  <!-- AI 생성 모달 -->
+  <div class="modal-overlay hidden" id="aiModal" onclick="closeAiModal(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-title">AI로 HTML 생성</div>
+      <textarea class="modal-textarea" id="aiPromptInput"
+                placeholder="예: 커피가 건강에 미치는 영향에 대해 작성해줘&#10;예: 계란에 대한 6가지 오해와 진실"></textarea>
+      <div class="status-msg" id="aiStatus"></div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeAiModal()">취소</button>
+        <button class="btn btn-ai" id="btnGenerate" onclick="generateHtml()">생성하기</button>
+      </div>
     </div>
   </div>
 
@@ -491,6 +567,70 @@
       document.getElementById('resetArea').classList.add('hidden');
       document.getElementById('externalLinkInput').value = '';
       document.getElementById('internalLinkInput').value = '';
+    }
+
+    // --- AI 생성 모달 ---
+    function openAiModal() {
+      document.getElementById('aiModal').classList.remove('hidden');
+      document.getElementById('aiPromptInput').focus();
+    }
+
+    function closeAiModal(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById('aiModal').classList.add('hidden');
+      document.getElementById('aiPromptInput').value = '';
+      document.getElementById('aiStatus').className = 'status-msg';
+      document.getElementById('aiStatus').innerHTML = '';
+    }
+
+    async function generateHtml() {
+      const prompt = document.getElementById('aiPromptInput').value.trim();
+      const statusEl = document.getElementById('aiStatus');
+      const btnGen = document.getElementById('btnGenerate');
+
+      if (!prompt) { alert('요청사항을 입력해주세요.'); return; }
+
+      btnGen.disabled = true;
+      statusEl.className = 'status-msg status-loading';
+      statusEl.innerHTML = '<span class="spinner"></span> AI가 글을 작성 중... (최대 2분 소요)';
+
+      try {
+        const resp = await fetch('/api/generate-html', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-App-Password': getPassword()
+          },
+          body: JSON.stringify({ prompt }),
+        });
+        const data = await resp.json();
+
+        if (data.ok) {
+          // HTML을 File 객체로 변환
+          const blob = new Blob([data.html], { type: 'text/html' });
+          htmlFile = new File([blob], 'generated.html', { type: 'text/html' });
+
+          // UI 업데이트
+          document.getElementById('htmlFileName').textContent = 'AI 생성됨: generated.html';
+          document.getElementById('htmlDrop').classList.add('has-file');
+
+          // 제목 자동 추출 (h1 태그에서)
+          const h1Match = data.html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+          if (h1Match && !document.getElementById('titleInput').value) {
+            document.getElementById('titleInput').value = h1Match[1].trim();
+          }
+
+          closeAiModal();
+        } else {
+          statusEl.className = 'status-msg status-err';
+          statusEl.textContent = data.error;
+          btnGen.disabled = false;
+        }
+      } catch (e) {
+        statusEl.className = 'status-msg status-err';
+        statusEl.textContent = '서버 오류';
+        btnGen.disabled = false;
+      }
     }
 
     if ('serviceWorker' in navigator) {
