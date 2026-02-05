@@ -1,35 +1,48 @@
 """
-WordPress 글 자동 발행 - PWA 웹 서버
+WordPress 글 자동 발행 - PWA 웹 서버 (Render 호스팅용)
 """
 
 import json
 import mimetypes
 import os
 import re
-import sys
-import webbrowser
-import threading
+import tempfile
+from functools import wraps
 from pathlib import Path
 
 import requests as http_requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
 
-SCRIPT_DIR = Path(__file__).parent
-load_dotenv(SCRIPT_DIR / ".env")
+load_dotenv()
 
 WP_URL = os.getenv("WP_URL", "").rstrip("/")
 WP_USERNAME = os.getenv("WP_USERNAME", "")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 
-PUBLISH_DIR = SCRIPT_DIR / "publish"
+SITE_NAME = os.getenv("SITE_NAME", "메디셜 공식 블로그")
+CATEGORY_ID = int(os.getenv("CATEGORY_ID", "22"))
+AUTHOR_ID = int(os.getenv("AUTHOR_ID", "4"))
+AUTHOR_INSTAGRAM = os.getenv("AUTHOR_INSTAGRAM", "https://www.instagram.com/medi_eungsuk/")
+
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
-HTML_EXTS = {".html", ".htm"}
-
-with open(SCRIPT_DIR / "config.json", encoding="utf-8") as f:
-    CONFIG = json.load(f)
 
 app = Flask(__name__, static_folder="static")
+
+
+# ─── 인증 ───
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not APP_PASSWORD:
+            return f(*args, **kwargs)
+        auth = request.headers.get("X-App-Password", "")
+        if auth != APP_PASSWORD:
+            return jsonify({"ok": False, "error": "비밀번호가 올바르지 않습니다."}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 # ─── 유틸 함수 ───
@@ -68,17 +81,12 @@ def extract_focus_keyword(title):
     return keyword if keyword else title
 
 
-def find_files(folder, extensions):
-    return [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in extensions]
-
-
 def inject_external_link(html_content):
-    instagram_url = CONFIG.get("author_instagram", "")
-    if not instagram_url or "instagram.com" in html_content:
+    if not AUTHOR_INSTAGRAM or "instagram.com" in html_content:
         return html_content
     link_html = (
         f'<p>더 많은 건강 정보는 '
-        f'<a href="{instagram_url}" target="_blank">응석 김 인스타그램</a>'
+        f'<a href="{AUTHOR_INSTAGRAM}" target="_blank">응석 김 인스타그램</a>'
         f'에서 확인하세요.</p>'
     )
     return html_content + "\n" + link_html
@@ -113,36 +121,30 @@ def inject_focus_keyword_image(html_content, focus_keyword, image_url):
     return img_tag + "\n" + html_content
 
 
-def build_seo_fields(title, html_content, meta):
-    focus_keyword = meta.get("focus_keyword", "") or extract_focus_keyword(title)
+def build_seo_fields(title, html_content):
+    focus_keyword = extract_focus_keyword(title)
     plain_text = strip_html(html_content)
 
-    seo_title = meta.get("seo_title", "")
-    if not seo_title:
-        if focus_keyword.lower() in title.lower():
-            seo_title = f"{title} - {CONFIG['site_name']}"
-        else:
-            seo_title = f"{title} | {focus_keyword} - {CONFIG['site_name']}"
+    if focus_keyword.lower() in title.lower():
+        seo_title = f"{title} - {SITE_NAME}"
+    else:
+        seo_title = f"{title} | {focus_keyword} - {SITE_NAME}"
 
-    description = meta.get("description", "")
-    if not description:
-        desc_text = plain_text[:300].replace("\n", " ").strip()
-        last_period = desc_text[:140].rfind(".")
-        description = desc_text[:last_period + 1] if last_period > 50 else desc_text[:140]
-        if focus_keyword.lower() not in description.lower():
-            description = f"{focus_keyword} - {description}"
+    desc_text = plain_text[:300].replace("\n", " ").strip()
+    last_period = desc_text[:140].rfind(".")
+    description = desc_text[:last_period + 1] if last_period > 50 else desc_text[:140]
+    if focus_keyword.lower() not in description.lower():
+        description = f"{focus_keyword} - {description}"
     if len(description) > 155:
         description = description[:152] + "..."
 
-    slug = meta.get("slug", make_slug(focus_keyword))
-    tags = meta.get("tags", [])
+    slug = make_slug(focus_keyword)
 
     return {
         "focus_keyword": focus_keyword,
         "description": description,
         "seo_title": seo_title,
         "slug": slug,
-        "tags": tags,
     }
 
 
@@ -174,7 +176,7 @@ def get_or_create_tags(tag_names):
 
 def upload_image(image_path, alt_text=""):
     mime_type = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
-    ascii_filename = f"image{image_path.suffix}"
+    ascii_filename = f"image{Path(image_path).suffix}"
 
     resp = http_requests.post(
         f"{WP_URL}/wp-json/wp/v2/media",
@@ -183,7 +185,7 @@ def upload_image(image_path, alt_text=""):
             "Content-Disposition": f'attachment; filename="{ascii_filename}"',
             "Content-Type": mime_type,
         },
-        data=image_path.read_bytes(), timeout=60,
+        data=Path(image_path).read_bytes(), timeout=60,
     )
     if resp.status_code not in (200, 201):
         return -1, ""
@@ -218,157 +220,133 @@ def service_worker():
     return send_from_directory("static", "sw.js")
 
 
-@app.route("/api/folders")
-def api_folders():
-    if not PUBLISH_DIR.exists():
-        PUBLISH_DIR.mkdir()
-        return jsonify([])
-
-    folders = sorted([f for f in PUBLISH_DIR.iterdir() if f.is_dir()])
-    result = []
-    for folder in folders:
-        html_files = find_files(folder, HTML_EXTS)
-        image_files = find_files(folder, IMAGE_EXTS)
-        has_meta = (folder / "meta.json").exists()
-
-        errors = []
-        if len(html_files) == 0:
-            errors.append("HTML 파일 없음")
-        elif len(html_files) > 1:
-            errors.append(f"HTML {len(html_files)}개")
-        if len(image_files) == 0:
-            errors.append("이미지 없음")
-        elif len(image_files) > 1:
-            errors.append(f"이미지 {len(image_files)}개")
-
-        title = folder.name
-        focus_keyword = extract_focus_keyword(title)
-
-        result.append({
-            "name": folder.name,
-            "valid": len(errors) == 0,
-            "errors": errors,
-            "html": html_files[0].name if html_files else None,
-            "image": image_files[0].name if image_files else None,
-            "has_meta": has_meta,
-            "focus_keyword": focus_keyword,
-        })
-    return jsonify(result)
+@app.route("/api/auth", methods=["POST"])
+def api_auth():
+    if not APP_PASSWORD:
+        return jsonify({"ok": True})
+    pw = request.json.get("password", "")
+    if pw == APP_PASSWORD:
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "비밀번호가 올바르지 않습니다."}), 401
 
 
 @app.route("/api/publish", methods=["POST"])
+@require_auth
 def api_publish():
-    data = request.json
-    folder_name = data.get("folder")
-    status = data.get("status", "draft")
+    title = request.form.get("title", "").strip()
+    status = request.form.get("status", "draft")
+    html_file = request.files.get("html_file")
+    image_file = request.files.get("image_file")
 
-    folder = PUBLISH_DIR / folder_name
-    if not folder.exists():
-        return jsonify({"ok": False, "error": "폴더를 찾을 수 없습니다."}), 404
+    if not title:
+        return jsonify({"ok": False, "error": "제목을 입력해주세요."}), 400
+    if not html_file:
+        return jsonify({"ok": False, "error": "HTML 파일을 업로드해주세요."}), 400
+    if not image_file:
+        return jsonify({"ok": False, "error": "이미지 파일을 업로드해주세요."}), 400
 
-    html_files = find_files(folder, HTML_EXTS)
-    image_files = find_files(folder, IMAGE_EXTS)
-    if not html_files or not image_files:
-        return jsonify({"ok": False, "error": "HTML 또는 이미지 파일이 없습니다."}), 400
+    # 이미지 확장자 검증
+    img_ext = os.path.splitext(image_file.filename)[1].lower()
+    if img_ext not in IMAGE_EXTS:
+        return jsonify({"ok": False, "error": f"지원하지 않는 이미지 형식입니다: {img_ext}"}), 400
 
-    title = folder.name
-    html_content = html_files[0].read_text(encoding="utf-8")
+    try:
+        html_content = html_file.read().decode("utf-8")
+    except UnicodeDecodeError:
+        return jsonify({"ok": False, "error": "HTML 파일을 UTF-8로 읽을 수 없습니다."}), 400
 
-    meta_path = folder / "meta.json"
-    meta = {}
-    if meta_path.exists():
-        with open(meta_path, encoding="utf-8") as f:
-            meta = json.load(f)
+    # 임시 파일로 이미지 저장
+    with tempfile.NamedTemporaryFile(delete=False, suffix=img_ext) as tmp:
+        image_file.save(tmp)
+        tmp_path = tmp.name
 
-    seo = build_seo_fields(title, html_content, meta)
-    focus_keyword = seo["focus_keyword"]
+    try:
+        seo = build_seo_fields(title, html_content)
+        focus_keyword = seo["focus_keyword"]
 
-    # 이미지 업로드
-    media_id, image_url = upload_image(image_files[0], alt_text=focus_keyword)
-    if media_id == -1:
-        return jsonify({"ok": False, "error": "이미지 업로드 실패"}), 500
+        # 이미지 업로드
+        media_id, image_url = upload_image(tmp_path, alt_text=focus_keyword)
+        if media_id == -1:
+            return jsonify({"ok": False, "error": "이미지 업로드 실패"}), 500
 
-    # 콘텐츠 최적화
-    html_content = ensure_focus_keyword_in_content(html_content, focus_keyword)
-    html_content = ensure_focus_keyword_in_subheading(html_content, focus_keyword)
-    if image_url:
-        html_content = inject_focus_keyword_image(html_content, focus_keyword, image_url)
-    html_content = inject_external_link(html_content)
-    wp_content = f"<!-- wp:html -->\n{html_content}\n<!-- /wp:html -->"
+        # 콘텐츠 최적화
+        html_content = ensure_focus_keyword_in_content(html_content, focus_keyword)
+        html_content = ensure_focus_keyword_in_subheading(html_content, focus_keyword)
+        if image_url:
+            html_content = inject_focus_keyword_image(html_content, focus_keyword, image_url)
+        html_content = inject_external_link(html_content)
+        wp_content = f"<!-- wp:html -->\n{html_content}\n<!-- /wp:html -->"
 
-    # 태그
-    tag_ids = get_or_create_tags(seo["tags"]) if seo["tags"] else []
+        # 글 발행
+        post_data = {
+            "title": title,
+            "content": wp_content,
+            "status": status,
+            "slug": seo["slug"],
+            "featured_media": media_id,
+            "categories": [CATEGORY_ID],
+            "author": AUTHOR_ID,
+        }
 
-    # 글 발행
-    post_data = {
-        "title": title,
-        "content": wp_content,
-        "status": status,
-        "slug": seo["slug"],
-        "featured_media": media_id,
-        "categories": [CONFIG["category_id"]],
-        "author": CONFIG["author_id"],
-    }
-    if tag_ids:
-        post_data["tags"] = tag_ids
+        resp = http_requests.post(
+            f"{WP_URL}/wp-json/wp/v2/posts",
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            json=post_data, timeout=30,
+        )
+        if resp.status_code not in (200, 201):
+            return jsonify({"ok": False, "error": f"글 발행 실패 (HTTP {resp.status_code})"}), 500
 
-    resp = http_requests.post(
-        f"{WP_URL}/wp-json/wp/v2/posts",
-        auth=(WP_USERNAME, WP_APP_PASSWORD),
-        json=post_data, timeout=30,
-    )
-    if resp.status_code not in (200, 201):
-        return jsonify({"ok": False, "error": f"글 발행 실패 (HTTP {resp.status_code})"}), 500
+        result = resp.json()
+        post_id = result["id"]
 
-    result = resp.json()
-    post_id = result["id"]
+        # Rank Math 메타
+        http_requests.post(
+            f"{WP_URL}/wp-json/rankmath/v1/updateMeta",
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            json={
+                "objectType": "post", "objectID": post_id,
+                "meta": {
+                    "rank_math_title": seo["seo_title"],
+                    "rank_math_description": seo["description"],
+                    "rank_math_focus_keyword": seo["focus_keyword"],
+                    "rank_math_robots": "index,follow",
+                },
+            }, timeout=15,
+        )
 
-    # Rank Math 메타
-    http_requests.post(
-        f"{WP_URL}/wp-json/rankmath/v1/updateMeta",
-        auth=(WP_USERNAME, WP_APP_PASSWORD),
-        json={
-            "objectType": "post", "objectID": post_id,
-            "meta": {
-                "rank_math_title": seo["seo_title"],
-                "rank_math_description": seo["description"],
-                "rank_math_focus_keyword": seo["focus_keyword"],
-                "rank_math_robots": "index,follow",
-            },
-        }, timeout=15,
-    )
+        # Rank Math 스키마
+        http_requests.post(
+            f"{WP_URL}/wp-json/rankmath/v1/updateSchemas",
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            json={
+                "objectType": "post", "objectID": post_id,
+                "schemas": {
+                    "new-1": {
+                        "@type": "Article",
+                        "metadata": {"title": "Article", "type": "template", "isPrimary": True},
+                        "headline": "%seo_title%",
+                        "description": "%seo_description%",
+                        "datePublished": "%date(Y-m-dTH:i:sP)%",
+                        "dateModified": "%modified(Y-m-dTH:i:sP)%",
+                        "author": {"@type": "Person", "name": "%name%"},
+                    }
+                },
+            }, timeout=15,
+        )
 
-    # Rank Math 스키마
-    http_requests.post(
-        f"{WP_URL}/wp-json/rankmath/v1/updateSchemas",
-        auth=(WP_USERNAME, WP_APP_PASSWORD),
-        json={
-            "objectType": "post", "objectID": post_id,
-            "schemas": {
-                "new-1": {
-                    "@type": "Article",
-                    "metadata": {"title": "Article", "type": "template", "isPrimary": True},
-                    "headline": "%seo_title%",
-                    "description": "%seo_description%",
-                    "datePublished": "%date(Y-m-dTH:i:sP)%",
-                    "dateModified": "%modified(Y-m-dTH:i:sP)%",
-                    "author": {"@type": "Person", "name": "%name%"},
-                }
-            },
-        }, timeout=15,
-    )
+        return jsonify({
+            "ok": True,
+            "post_id": post_id,
+            "url": result["link"],
+            "seo": seo,
+        })
 
-    return jsonify({
-        "ok": True,
-        "post_id": post_id,
-        "url": result["link"],
-        "seo": seo,
-    })
+    finally:
+        os.unlink(tmp_path)
 
 
 if __name__ == "__main__":
-    port = 5000
+    port = int(os.getenv("PORT", "5000"))
     print(f"\n  워드프레스 자동 발행 서버 시작")
     print(f"  http://localhost:{port}\n")
-    threading.Timer(1.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    app.run(host="127.0.0.1", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)

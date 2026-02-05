@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: wordpress-publisher
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: WP_URL
+        sync: false
+      - key: WP_USERNAME
+        sync: false
+      - key: WP_APP_PASSWORD
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: SITE_NAME
+        value: "메디셜 공식 블로그"
+      - key: CATEGORY_ID
+        value: "22"
+      - key: AUTHOR_ID
+        value: "4"
+      - key: AUTHOR_INSTAGRAM
+        value: "https://www.instagram.com/medi_eungsuk/"

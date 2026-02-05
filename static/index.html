@@ -22,46 +22,61 @@
     }
     .header h1 { font-size: 22px; font-weight: 600; }
     .header p { font-size: 13px; opacity: 0.8; margin-top: 4px; }
-    .container { max-width: 800px; margin: 24px auto; padding: 0 16px; }
+    .container { max-width: 600px; margin: 24px auto; padding: 0 16px; }
     .card {
       background: white;
       border-radius: 12px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-      margin-bottom: 12px;
+      margin-bottom: 16px;
       overflow: hidden;
-      transition: box-shadow 0.2s;
     }
-    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
-    .card-body { padding: 20px; }
+    .card-body { padding: 24px; }
     .card-title {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      margin-bottom: 16px;
+      color: #333;
     }
-    .badge {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-weight: 500;
-    }
-    .badge-ok { background: #e8f5e9; color: #2e7d32; }
-    .badge-err { background: #fce4ec; color: #c62828; }
-    .badge-kw { background: #e3f2fd; color: #1565c0; }
-    .card-info {
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
       font-size: 13px;
-      color: #666;
-      margin-bottom: 12px;
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
+      font-weight: 500;
+      color: #555;
+      margin-bottom: 6px;
     }
-    .card-info span { display: flex; align-items: center; gap: 4px; }
-    .card-actions { display: flex; gap: 8px; }
+    .form-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus { border-color: #1a73e8; }
+    .drop-zone {
+      border: 2px dashed #ccc;
+      border-radius: 10px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #fafbfc;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #1a73e8;
+      background: #e8f0fe;
+    }
+    .drop-zone.has-file {
+      border-color: #34a853;
+      background: #e6f4ea;
+    }
+    .drop-zone-icon { font-size: 28px; margin-bottom: 6px; }
+    .drop-zone-text { font-size: 13px; color: #666; }
+    .drop-zone-file { font-size: 13px; color: #1a73e8; font-weight: 500; margin-top: 4px; }
     .btn {
-      padding: 8px 20px;
+      padding: 10px 24px;
       border: none;
       border-radius: 8px;
       font-size: 14px;
@@ -80,24 +95,19 @@
       color: #333;
     }
     .btn-draft:hover:not(:disabled) { background: #e0e2e4; }
-    .btn-all {
-      background: #0d47a1;
+    .btn-login {
+      width: 100%;
+      background: #1a73e8;
       color: white;
-      padding: 12px 28px;
+      padding: 12px;
       font-size: 15px;
     }
-    .btn-all:hover:not(:disabled) { background: #092e6b; }
-    .toolbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-    .toolbar-left { font-size: 14px; color: #666; }
+    .btn-login:hover:not(:disabled) { background: #1557b0; }
+    .btn-group { display: flex; gap: 10px; }
     .status-msg {
       padding: 12px 16px;
       border-radius: 8px;
-      margin-top: 8px;
+      margin-top: 16px;
       font-size: 13px;
       display: none;
     }
@@ -115,155 +125,273 @@
       margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .empty {
-      text-align: center;
-      padding: 60px 20px;
-      color: #999;
-    }
-    .empty p { margin-top: 8px; font-size: 14px; }
     .result-link {
       color: #1a73e8;
       text-decoration: none;
       font-weight: 500;
+      word-break: break-all;
     }
     .result-link:hover { text-decoration: underline; }
-    .refresh-btn {
+    .hidden { display: none !important; }
+    .reset-btn {
       background: none;
       border: 1px solid #ddd;
       border-radius: 8px;
-      padding: 6px 14px;
+      padding: 8px 16px;
       cursor: pointer;
       font-size: 13px;
       color: #666;
+      margin-top: 12px;
     }
-    .refresh-btn:hover { background: #f5f5f5; }
+    .reset-btn:hover { background: #f5f5f5; }
+    .seo-info {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>메디셜 블로그 자동 발행</h1>
-    <p>publish 폴더에 글을 넣고 발행하세요</p>
+    <p>HTML + 이미지를 업로드하여 WordPress에 발행</p>
   </div>
 
-  <div class="container">
-    <div class="toolbar">
-      <span class="toolbar-left" id="folderCount"></span>
-      <button class="refresh-btn" onclick="loadFolders()">새로고침</button>
+  <!-- 비밀번호 화면 -->
+  <div class="container" id="loginScreen">
+    <div class="card">
+      <div class="card-body">
+        <div class="card-title">비밀번호 입력</div>
+        <div class="form-group">
+          <input type="password" class="form-input" id="passwordInput"
+                 placeholder="비밀번호를 입력하세요" autocomplete="current-password">
+        </div>
+        <button class="btn btn-login" onclick="login()">로그인</button>
+        <div class="status-msg" id="loginStatus"></div>
+      </div>
     </div>
-    <div id="folderList"></div>
+  </div>
+
+  <!-- 발행 화면 -->
+  <div class="container hidden" id="publishScreen">
+    <div class="card">
+      <div class="card-body">
+        <div class="card-title">글 발행</div>
+
+        <!-- 제목 -->
+        <div class="form-group">
+          <label class="form-label">글 제목</label>
+          <input type="text" class="form-input" id="titleInput"
+                 placeholder="예: 계란에 대해 잘못 알려진 6가지 상식">
+        </div>
+
+        <!-- HTML 파일 -->
+        <div class="form-group">
+          <label class="form-label">HTML 파일</label>
+          <div class="drop-zone" id="htmlDrop" onclick="document.getElementById('htmlFileInput').click()">
+            <div class="drop-zone-icon">&#128196;</div>
+            <div class="drop-zone-text">클릭 또는 드래그하여 HTML 파일 업로드</div>
+            <div class="drop-zone-file" id="htmlFileName"></div>
+          </div>
+          <input type="file" id="htmlFileInput" accept=".html,.htm" style="display:none">
+        </div>
+
+        <!-- 이미지 파일 -->
+        <div class="form-group">
+          <label class="form-label">대표 이미지</label>
+          <div class="drop-zone" id="imageDrop" onclick="document.getElementById('imageFileInput').click()">
+            <div class="drop-zone-icon">&#128247;</div>
+            <div class="drop-zone-text">클릭 또는 드래그하여 이미지 업로드</div>
+            <div class="drop-zone-file" id="imageFileName"></div>
+          </div>
+          <input type="file" id="imageFileInput" accept="image/*" style="display:none">
+        </div>
+
+        <!-- 버튼 -->
+        <div class="btn-group">
+          <button class="btn btn-publish" id="btnPublish" onclick="publish('publish')">발행하기</button>
+          <button class="btn btn-draft" id="btnDraft" onclick="publish('draft')">임시글 저장</button>
+        </div>
+
+        <div class="status-msg" id="publishStatus"></div>
+      </div>
+    </div>
+
+    <!-- 발행 완료 후 새 글 작성 버튼 -->
+    <div class="hidden" id="resetArea" style="text-align:center;">
+      <button class="reset-btn" onclick="resetForm()">새 글 작성</button>
+    </div>
   </div>
 
   <script>
-    let folders = [];
+    let htmlFile = null;
+    let imageFile = null;
 
-    async function loadFolders() {
-      const list = document.getElementById('folderList');
-      const count = document.getElementById('folderCount');
-      list.innerHTML = '<div class="empty"><div class="spinner"></div> 불러오는 중...</div>';
-
-      try {
-        const resp = await fetch('/api/folders');
-        folders = await resp.json();
-      } catch (e) {
-        list.innerHTML = '<div class="empty">서버 연결 실패</div>';
-        return;
-      }
-
-      if (folders.length === 0) {
-        list.innerHTML = '<div class="empty"><p>publish 폴더에 글 폴더를 넣어주세요</p></div>';
-        count.textContent = '';
-        return;
-      }
-
-      const validCount = folders.filter(f => f.valid).length;
-      count.textContent = `총 ${folders.length}개 / 발행 가능 ${validCount}개`;
-
-      let html = '';
-      folders.forEach((f, i) => {
-        const statusBadge = f.valid
-          ? '<span class="badge badge-ok">준비됨</span>'
-          : '<span class="badge badge-err">' + f.errors.join(', ') + '</span>';
-
-        const kwBadge = f.focus_keyword
-          ? `<span class="badge badge-kw">${f.focus_keyword}</span>`
-          : '';
-
-        const info = [];
-        if (f.html) info.push(`<span>${f.html}</span>`);
-        if (f.image) info.push(`<span>${f.image}</span>`);
-        if (f.has_meta) info.push('<span>meta.json</span>');
-
-        const buttons = f.valid
-          ? `<div class="card-actions">
-               <button class="btn btn-publish" onclick="publish(${i}, 'publish')">발행</button>
-               <button class="btn btn-draft" onclick="publish(${i}, 'draft')">임시글</button>
-             </div>`
-          : '';
-
-        html += `
-          <div class="card" id="card-${i}">
-            <div class="card-body">
-              <div class="card-title">${f.name} ${statusBadge} ${kwBadge}</div>
-              <div class="card-info">${info.join('')}</div>
-              ${buttons}
-              <div class="status-msg" id="status-${i}"></div>
-            </div>
-          </div>`;
-      });
-
-      if (validCount > 1) {
-        html += `
-          <div style="text-align:center; margin: 20px 0;">
-            <button class="btn btn-all" onclick="publishAll('publish')">전체 발행</button>
-            <button class="btn btn-draft" style="padding:12px 28px; font-size:15px;" onclick="publishAll('draft')">전체 임시글</button>
-          </div>`;
-      }
-
-      list.innerHTML = html;
+    // --- 비밀번호 / 인증 ---
+    function getPassword() {
+      return sessionStorage.getItem('app_pw') || '';
     }
 
-    async function publish(index, status) {
-      const f = folders[index];
-      const statusEl = document.getElementById(`status-${index}`);
-      const card = document.getElementById(`card-${index}`);
-      const buttons = card.querySelectorAll('.btn');
-      buttons.forEach(b => b.disabled = true);
-
+    async function login() {
+      const pw = document.getElementById('passwordInput').value;
+      const statusEl = document.getElementById('loginStatus');
       statusEl.className = 'status-msg status-loading';
-      statusEl.innerHTML = '<span class="spinner"></span> 발행 중...';
+      statusEl.innerHTML = '<span class="spinner"></span> 확인 중...';
+
+      try {
+        const resp = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw }),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          sessionStorage.setItem('app_pw', pw);
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('publishScreen').classList.remove('hidden');
+        } else {
+          statusEl.className = 'status-msg status-err';
+          statusEl.textContent = data.error || '로그인 실패';
+        }
+      } catch (e) {
+        statusEl.className = 'status-msg status-err';
+        statusEl.textContent = '서버 연결 실패';
+      }
+    }
+
+    // 엔터키로 로그인
+    document.getElementById('passwordInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') login();
+    });
+
+    // 이미 로그인된 경우 자동 전환
+    if (getPassword()) {
+      fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: getPassword() }),
+      }).then(r => r.json()).then(d => {
+        if (d.ok) {
+          document.getElementById('loginScreen').classList.add('hidden');
+          document.getElementById('publishScreen').classList.remove('hidden');
+        }
+      }).catch(() => {});
+    }
+
+    // --- 드래그 & 드롭 ---
+    function setupDropZone(dropId, fileInputId, fileNameId, onFile) {
+      const dropZone = document.getElementById(dropId);
+      const fileInput = document.getElementById(fileInputId);
+      const fileName = document.getElementById(fileNameId);
+
+      ['dragenter', 'dragover'].forEach(evt => {
+        dropZone.addEventListener(evt, e => {
+          e.preventDefault();
+          dropZone.classList.add('dragover');
+        });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, e => {
+          e.preventDefault();
+          dropZone.classList.remove('dragover');
+        });
+      });
+
+      dropZone.addEventListener('drop', e => {
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          onFile(file);
+          fileName.textContent = file.name;
+          dropZone.classList.add('has-file');
+        }
+      });
+
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (file) {
+          onFile(file);
+          fileName.textContent = file.name;
+          dropZone.classList.add('has-file');
+        }
+      });
+    }
+
+    setupDropZone('htmlDrop', 'htmlFileInput', 'htmlFileName', f => { htmlFile = f; });
+    setupDropZone('imageDrop', 'imageFileInput', 'imageFileName', f => { imageFile = f; });
+
+    // --- 발행 ---
+    async function publish(status) {
+      const title = document.getElementById('titleInput').value.trim();
+      const statusEl = document.getElementById('publishStatus');
+      const btnP = document.getElementById('btnPublish');
+      const btnD = document.getElementById('btnDraft');
+
+      if (!title) { alert('제목을 입력해주세요.'); return; }
+      if (!htmlFile) { alert('HTML 파일을 업로드해주세요.'); return; }
+      if (!imageFile) { alert('이미지 파일을 업로드해주세요.'); return; }
+
+      btnP.disabled = true;
+      btnD.disabled = true;
+      statusEl.className = 'status-msg status-loading';
+      statusEl.innerHTML = '<span class="spinner"></span> WordPress에 발행 중...';
+
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('status', status);
+      formData.append('html_file', htmlFile);
+      formData.append('image_file', imageFile);
 
       try {
         const resp = await fetch('/api/publish', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: f.name, status }),
+          headers: { 'X-App-Password': getPassword() },
+          body: formData,
         });
         const data = await resp.json();
 
         if (data.ok) {
+          let html = '발행 완료! <a class="result-link" href="' + data.url + '" target="_blank">' + data.url + '</a>';
+          if (data.seo) {
+            html += '<div class="seo-info">';
+            html += 'Focus Keyword: ' + data.seo.focus_keyword + '<br>';
+            html += 'SEO 제목: ' + data.seo.seo_title + '<br>';
+            html += '슬러그: ' + data.seo.slug;
+            html += '</div>';
+          }
           statusEl.className = 'status-msg status-ok';
-          statusEl.innerHTML = `발행 완료! <a class="result-link" href="${data.url}" target="_blank">${data.url}</a>`;
+          statusEl.innerHTML = html;
+          document.getElementById('resetArea').classList.remove('hidden');
         } else {
           statusEl.className = 'status-msg status-err';
           statusEl.textContent = data.error;
-          buttons.forEach(b => b.disabled = false);
+          btnP.disabled = false;
+          btnD.disabled = false;
         }
       } catch (e) {
         statusEl.className = 'status-msg status-err';
         statusEl.textContent = '서버 오류';
-        buttons.forEach(b => b.disabled = false);
+        btnP.disabled = false;
+        btnD.disabled = false;
       }
     }
 
-    async function publishAll(status) {
-      for (let i = 0; i < folders.length; i++) {
-        if (folders[i].valid) {
-          await publish(i, status);
-        }
-      }
+    function resetForm() {
+      document.getElementById('titleInput').value = '';
+      htmlFile = null;
+      imageFile = null;
+      document.getElementById('htmlFileName').textContent = '';
+      document.getElementById('imageFileName').textContent = '';
+      document.getElementById('htmlDrop').classList.remove('has-file');
+      document.getElementById('imageDrop').classList.remove('has-file');
+      document.getElementById('htmlFileInput').value = '';
+      document.getElementById('imageFileInput').value = '';
+      document.getElementById('publishStatus').className = 'status-msg';
+      document.getElementById('publishStatus').innerHTML = '';
+      document.getElementById('btnPublish').disabled = false;
+      document.getElementById('btnDraft').disabled = false;
+      document.getElementById('resetArea').classList.add('hidden');
     }
-
-    loadFolders();
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js');
