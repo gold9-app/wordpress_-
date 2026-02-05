@@ -81,7 +81,10 @@ def extract_focus_keyword(title):
     return keyword if keyword else title
 
 
-def inject_external_link(html_content):
+def inject_external_link(html_content, author_id):
+    """작성자가 응석 김(ID=4)일 때만 인스타그램 링크 삽입"""
+    if author_id != 4:
+        return html_content
     if not AUTHOR_INSTAGRAM or "instagram.com" in html_content:
         return html_content
     link_html = (
@@ -230,11 +233,46 @@ def api_auth():
     return jsonify({"ok": False, "error": "비밀번호가 올바르지 않습니다."}), 401
 
 
+@app.route("/api/options")
+@require_auth
+def api_options():
+    """작성자 및 카테고리 목록 조회"""
+    try:
+        authors_resp = http_requests.get(
+            f"{WP_URL}/wp-json/wp/v2/users",
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            timeout=10,
+        )
+        categories_resp = http_requests.get(
+            f"{WP_URL}/wp-json/wp/v2/categories",
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            params={"per_page": 50},
+            timeout=10,
+        )
+
+        authors = [{"id": u["id"], "name": u["name"]} for u in authors_resp.json()]
+        categories = [{"id": c["id"], "name": c["name"]} for c in categories_resp.json()]
+
+        return jsonify({
+            "ok": True,
+            "authors": authors,
+            "categories": categories,
+            "defaults": {
+                "author_id": AUTHOR_ID,
+                "category_id": CATEGORY_ID,
+            }
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/publish", methods=["POST"])
 @require_auth
 def api_publish():
     title = request.form.get("title", "").strip()
     status = request.form.get("status", "draft")
+    author_id = int(request.form.get("author_id", AUTHOR_ID))
+    category_id = int(request.form.get("category_id", CATEGORY_ID))
     html_file = request.files.get("html_file")
     image_file = request.files.get("image_file")
 
@@ -274,7 +312,7 @@ def api_publish():
         html_content = ensure_focus_keyword_in_subheading(html_content, focus_keyword)
         if image_url:
             html_content = inject_focus_keyword_image(html_content, focus_keyword, image_url)
-        html_content = inject_external_link(html_content)
+        html_content = inject_external_link(html_content, author_id)
         wp_content = f"<!-- wp:html -->\n{html_content}\n<!-- /wp:html -->"
 
         # 글 발행
@@ -284,8 +322,8 @@ def api_publish():
             "status": status,
             "slug": seo["slug"],
             "featured_media": media_id,
-            "categories": [CATEGORY_ID],
-            "author": AUTHOR_ID,
+            "categories": [category_id],
+            "author": author_id,
         }
 
         resp = http_requests.post(
