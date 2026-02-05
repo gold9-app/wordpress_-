@@ -404,6 +404,13 @@ def api_publish():
             }, timeout=15,
         )
 
+        # 글 재저장하여 Rank Math 점수 재계산 트리거
+        http_requests.post(
+            f"{WP_URL}/wp-json/wp/v2/posts/{post_id}",
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            json={"id": post_id}, timeout=15,
+        )
+
         return jsonify({
             "ok": True,
             "post_id": post_id,
