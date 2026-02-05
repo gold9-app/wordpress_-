@@ -227,6 +227,14 @@
           <div style="font-size:11px; color:#888; margin-top:4px;">글 하단에 링크가 삽입됩니다</div>
         </div>
 
+        <!-- 내부 링크 -->
+        <div class="form-group">
+          <label class="form-label">내부 링크 (선택사항)</label>
+          <input type="text" class="form-input" id="internalLinkInput"
+                 placeholder="예: https://blog.meditial.co.kr/your-post/">
+          <div style="font-size:11px; color:#888; margin-top:4px;">기존 발행 글 URL을 입력하면 본문에 링크가 삽입됩니다</div>
+        </div>
+
         <!-- HTML 파일 -->
         <div class="form-group">
           <label class="form-label">HTML 파일</label>
@@ -420,6 +428,7 @@
       const authorId = document.getElementById('authorSelect').value;
       const categoryId = document.getElementById('categorySelect').value;
       const externalLink = document.getElementById('externalLinkInput').value.trim();
+      const internalLink = document.getElementById('internalLinkInput').value.trim();
 
       const formData = new FormData();
       formData.append('title', title);
@@ -427,6 +436,7 @@
       formData.append('author_id', authorId);
       formData.append('category_id', categoryId);
       formData.append('external_link', externalLink);
+      formData.append('internal_link', internalLink);
       formData.append('html_file', htmlFile);
       formData.append('image_file', imageFile);
 
@@ -480,6 +490,7 @@
       document.getElementById('btnDraft').disabled = false;
       document.getElementById('resetArea').classList.add('hidden');
       document.getElementById('externalLinkInput').value = '';
+      document.getElementById('internalLinkInput').value = '';
     }
 
     if ('serviceWorker' in navigator) {

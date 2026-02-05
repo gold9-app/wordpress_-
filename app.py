@@ -108,6 +108,22 @@ def inject_external_link(html_content, author_id, custom_link=""):
         return html_content + "\n" + link_html
 
 
+def inject_internal_link(html_content, internal_link):
+    """내부 링크를 본문 중간에 삽입 (첫 번째 </p> 태그 뒤)"""
+    if not internal_link:
+        return html_content
+    link_html = (
+        f'<p>관련 글: <a href="{internal_link}">{internal_link}</a></p>'
+    )
+    # 첫 번째 </p> 뒤에 삽입
+    match = re.search(r"</p>", html_content, re.IGNORECASE)
+    if match:
+        pos = match.end()
+        return html_content[:pos] + "\n" + link_html + "\n" + html_content[pos:]
+    # </p>가 없으면 맨 앞에 삽입
+    return link_html + "\n" + html_content
+
+
 def ensure_focus_keyword_in_content(html_content, focus_keyword):
     plain_start = strip_html(html_content[:500])
     if focus_keyword.lower() in plain_start.lower():
@@ -287,6 +303,7 @@ def api_publish():
     author_id = int(request.form.get("author_id", AUTHOR_ID))
     category_id = int(request.form.get("category_id", CATEGORY_ID))
     external_link = request.form.get("external_link", "").strip()
+    internal_link = request.form.get("internal_link", "").strip()
     html_file = request.files.get("html_file")
     image_file = request.files.get("image_file")
 
@@ -326,6 +343,7 @@ def api_publish():
         html_content = ensure_focus_keyword_in_subheading(html_content, focus_keyword)
         if image_url:
             html_content = inject_focus_keyword_image(html_content, focus_keyword, image_url)
+        html_content = inject_internal_link(html_content, internal_link)
         html_content = inject_external_link(html_content, author_id, external_link)
         wp_content = f"<!-- wp:html -->\n{html_content}\n<!-- /wp:html -->"
 
