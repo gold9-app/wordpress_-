@@ -584,6 +584,38 @@
       document.getElementById('btnGenerate').disabled = false;
     }
 
+    async function generateImage(title) {
+      try {
+        const resp = await fetch('/api/generate-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-App-Password': getPassword()
+          },
+          body: JSON.stringify({ title }),
+        });
+        const data = await resp.json();
+
+        if (data.ok) {
+          // Base64 이미지를 File 객체로 변환
+          const byteString = atob(data.image);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          const blob = new Blob([ab], { type: 'image/png' });
+          imageFile = new File([blob], data.filename, { type: 'image/png' });
+
+          // UI 업데이트
+          document.getElementById('imageFileName').textContent = 'AI 생성됨: ' + data.filename;
+          document.getElementById('imageDrop').classList.add('has-file');
+        }
+      } catch (e) {
+        console.error('이미지 생성 실패:', e);
+      }
+    }
+
     async function generateHtml() {
       const prompt = document.getElementById('aiPromptInput').value.trim();
       const statusEl = document.getElementById('aiStatus');
@@ -617,8 +649,19 @@
 
           // 제목 자동 추출 (h1 태그에서)
           const h1Match = data.html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-          if (h1Match && !document.getElementById('titleInput').value) {
-            document.getElementById('titleInput').value = h1Match[1].trim();
+          let extractedTitle = '';
+          if (h1Match) {
+            extractedTitle = h1Match[1].trim();
+            if (!document.getElementById('titleInput').value) {
+              document.getElementById('titleInput').value = extractedTitle;
+            }
+          }
+
+          // 이미지 자동 생성
+          const titleForImage = extractedTitle || document.getElementById('titleInput').value;
+          if (titleForImage) {
+            statusEl.innerHTML = '<span class="spinner"></span> 대표 이미지 생성 중...';
+            await generateImage(titleForImage);
           }
 
           closeAiModal();
