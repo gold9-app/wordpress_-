@@ -60,6 +60,7 @@ def make_slug(text):
 
 
 def extract_focus_keyword(title):
+    """제목에서 핵심 키워드 한 단어만 추출"""
     keyword = title
     keyword = re.sub(r"\d+\s*가지", "", keyword)
     remove_patterns = [
@@ -74,12 +75,20 @@ def extract_focus_keyword(title):
         "진실", "오해", "팩트", "팩트체크", "궁금증",
         "잘못 알려진", "잘못알려진", "최신", "최고의", "효과적인",
         "올바른", "정확한", "꼭 필요한", "반드시", "꼭",
+        "의사가 알려드립니다", "의사가 알려주는", "전문가가 알려주는",
+        "몰랐던", "알려드리는", "알려주는", "숨겨진",
     ]
     for p in remove_patterns:
         keyword = keyword.replace(p, "")
     keyword = re.sub(r"[|,\-~:?!]", "", keyword)
     keyword = re.sub(r"\s+", " ", keyword).strip()
-    return keyword if keyword else title
+
+    # 첫 번째 단어만 추출 (핵심 키워드)
+    if keyword:
+        words = keyword.split()
+        if words:
+            return words[0]
+    return title.split()[0] if title.split() else title
 
 
 def inject_external_link(html_content, author_id, custom_link=""):
