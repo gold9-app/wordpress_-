@@ -317,6 +317,9 @@
             <div class="drop-zone-file" id="imageFileName"></div>
           </div>
           <input type="file" id="imageFileInput" accept="image/*" style="display:none">
+          <div class="html-actions">
+            <button type="button" class="btn btn-small btn-ai" id="btnGenImage" onclick="generateImageManual()">AI로 이미지 생성</button>
+          </div>
         </div>
 
         <!-- 버튼 -->
@@ -613,6 +616,34 @@
         }
       } catch (e) {
         console.error('이미지 생성 실패:', e);
+      }
+    }
+
+    async function generateImageManual() {
+      const title = document.getElementById('titleInput').value.trim();
+      if (!title) {
+        alert('먼저 제목을 입력해주세요.');
+        return;
+      }
+
+      const btn = document.getElementById('btnGenImage');
+      const statusEl = document.getElementById('publishStatus');
+
+      btn.disabled = true;
+      btn.textContent = '생성 중...';
+      statusEl.className = 'status-msg status-loading';
+      statusEl.innerHTML = '<span class="spinner"></span> AI가 이미지 생성 중...';
+
+      try {
+        await generateImage(title);
+        statusEl.className = 'status-msg status-ok';
+        statusEl.textContent = '이미지 생성 완료!';
+      } catch (e) {
+        statusEl.className = 'status-msg status-err';
+        statusEl.textContent = '이미지 생성 실패: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'AI로 이미지 생성';
       }
     }
 
