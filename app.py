@@ -349,7 +349,7 @@ CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건�
 5. 폰트: Noto Sans KR, Malgun Gothic
 6. 깔끔한 여백과 가독성 좋은 줄간격
 7. ```html 등 마크다운 없이 순수 HTML만 출력
-8. 칼럼에 걸맞는 충분한 길이 (1500-2500자)"""
+8. 칼럼에 걸맞는 충분한 길이로 작성. 단어 수가 1000~1500 단어 정도로 긴 길이"""
 
 
 @app.route("/api/generate-html", methods=["POST"])
