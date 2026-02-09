@@ -2,5 +2,3 @@ flask
 gunicorn
 requests
 python-dotenv
-google-generativeai
-Pillow

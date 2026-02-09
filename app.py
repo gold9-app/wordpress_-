@@ -21,7 +21,6 @@ WP_USERNAME = os.getenv("WP_USERNAME", "")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 SITE_NAME = os.getenv("SITE_NAME", "메디셜 공식 블로그")
 CATEGORY_ID = int(os.getenv("CATEGORY_ID", "22"))
@@ -404,64 +403,6 @@ def api_generate_html():
         html_content = html_content.strip()
 
         return jsonify({"ok": True, "html": html_content})
-
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@app.route("/api/generate-image", methods=["POST"])
-@require_auth
-def api_generate_image():
-    """Gemini Imagen 3로 대표 이미지 생성"""
-    if not GEMINI_API_KEY:
-        return jsonify({"ok": False, "error": "Gemini API 키가 설정되지 않았습니다."}), 500
-
-    data = request.get_json() or {}
-    title = data.get("title", "").strip()
-
-    if not title:
-        return jsonify({"ok": False, "error": "제목을 입력해주세요."}), 400
-
-    # 제목에서 포커스 키워드 추출
-    keyword = extract_focus_keyword(title)
-
-    try:
-        import google.generativeai as genai
-        from PIL import Image
-        import io
-        import base64
-
-        genai.configure(api_key=GEMINI_API_KEY)
-
-        # 이미지 생성 프롬프트 (흰 배경 + 누끼 스타일)
-        prompt = f"{keyword}, isolated on pure white background, product photography, clean minimalist style, studio lighting, high quality, no shadows, centered composition"
-
-        imagen = genai.ImageGenerationModel("imagen-3.0-generate-001")
-        result = imagen.generate_images(
-            prompt=prompt,
-            number_of_images=1,
-            aspect_ratio="16:9",
-            safety_filter_level="block_only_high",
-        )
-
-        if not result.images:
-            return jsonify({"ok": False, "error": "이미지 생성에 실패했습니다."}), 500
-
-        # 이미지를 1376x768로 리사이즈
-        img_data = result.images[0]._pil_image
-        img_resized = img_data.resize((1376, 768), Image.LANCZOS)
-
-        # PNG로 변환하여 base64 인코딩
-        buffer = io.BytesIO()
-        img_resized.save(buffer, format="PNG")
-        buffer.seek(0)
-        img_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-        return jsonify({
-            "ok": True,
-            "image": img_base64,
-            "filename": f"{keyword}_thumbnail.png"
-        })
 
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
