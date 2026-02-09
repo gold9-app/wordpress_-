@@ -320,6 +320,13 @@
           <div class="html-actions">
             <button type="button" class="btn btn-small btn-ai" id="btnGenImage" onclick="generateImageManual()">AI로 이미지 생성</button>
           </div>
+          <!-- 이미지 미리보기 -->
+          <div id="imagePreviewArea" class="hidden" style="margin-top:12px;">
+            <img id="imagePreview" style="max-width:100%; border-radius:8px; border:1px solid #e0e0e0;">
+            <div style="margin-top:8px;">
+              <a id="imageDownload" class="btn btn-small" style="text-decoration:none;" download>다운로드</a>
+            </div>
+          </div>
         </div>
 
         <!-- 버튼 -->
@@ -569,6 +576,9 @@
       document.getElementById('btnDraft').disabled = false;
       document.getElementById('resetArea').classList.add('hidden');
       document.getElementById('externalLinkInput').value = '';
+      document.getElementById('imagePreviewArea').classList.add('hidden');
+      document.getElementById('imagePreview').src = '';
+      document.getElementById('imageDownload').href = '';
       document.getElementById('internalLinkInput').value = '';
     }
 
@@ -613,6 +623,13 @@
           // UI 업데이트
           document.getElementById('imageFileName').textContent = 'AI 생성됨: ' + data.filename;
           document.getElementById('imageDrop').classList.add('has-file');
+
+          // 미리보기 및 다운로드 설정
+          const imageUrl = URL.createObjectURL(blob);
+          document.getElementById('imagePreview').src = imageUrl;
+          document.getElementById('imageDownload').href = imageUrl;
+          document.getElementById('imageDownload').download = data.filename;
+          document.getElementById('imagePreviewArea').classList.remove('hidden');
         }
       } catch (e) {
         console.error('이미지 생성 실패:', e);
