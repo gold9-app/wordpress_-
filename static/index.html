@@ -305,6 +305,8 @@
           <input type="file" id="htmlFileInput" accept=".html,.htm" style="display:none">
           <div class="html-actions">
             <button type="button" class="btn btn-small btn-ai" onclick="openAiModal()">AI로 생성</button>
+            <button type="button" class="btn btn-small" id="btnPreview" onclick="previewHtml()" style="display:none;">미리보기</button>
+            <button type="button" class="btn btn-small" id="btnDownload" onclick="downloadHtml()" style="display:none;">다운로드</button>
           </div>
         </div>
 
@@ -349,9 +351,28 @@
     </div>
   </div>
 
+  <!-- HTML 미리보기 모달 -->
+  <div class="modal-overlay hidden" id="previewModal" onclick="closePreviewModal(event)">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width: 900px;">
+      <div class="modal-title">HTML 미리보기</div>
+      <div style="margin-bottom: 12px;">
+        <button class="btn btn-small" onclick="switchPreviewMode('rendered')">렌더링 보기</button>
+        <button class="btn btn-small" onclick="switchPreviewMode('source')">소스 보기</button>
+      </div>
+      <div id="previewRendered" style="border: 1px solid #ddd; border-radius: 8px; padding: 20px; max-height: 500px; overflow-y: auto; background: white;">
+      </div>
+      <textarea id="previewSource" class="modal-textarea" style="height: 500px; display: none; font-family: monospace; font-size: 12px;" readonly></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closePreviewModal()">닫기</button>
+        <button class="btn btn-ai" onclick="downloadHtml()">다운로드</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let htmlFile = null;
     let imageFile = null;
+    let generatedHtmlContent = '';
 
     // --- 비밀번호 / 인증 ---
     function getPassword() {
@@ -611,9 +632,16 @@
           const blob = new Blob([data.html], { type: 'text/html' });
           htmlFile = new File([blob], 'generated.html', { type: 'text/html' });
 
+          // 생성된 HTML 저장
+          generatedHtmlContent = data.html;
+
           // UI 업데이트
           document.getElementById('htmlFileName').textContent = 'AI 생성됨: generated.html';
           document.getElementById('htmlDrop').classList.add('has-file');
+
+          // 미리보기/다운로드 버튼 표시
+          document.getElementById('btnPreview').style.display = 'inline-block';
+          document.getElementById('btnDownload').style.display = 'inline-block';
 
           // 제목 자동 추출 (h1 태그에서)
           const h1Match = data.html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
@@ -622,6 +650,9 @@
           }
 
           closeAiModal();
+
+          // 자동으로 미리보기 열기
+          setTimeout(() => previewHtml(), 300);
         } else {
           statusEl.className = 'status-msg status-err';
           statusEl.textContent = data.error;
@@ -632,6 +663,66 @@
         statusEl.textContent = '서버 오류';
         btnGen.disabled = false;
       }
+    }
+
+    // --- HTML 미리보기/다운로드 ---
+    function previewHtml() {
+      if (!generatedHtmlContent && !htmlFile) {
+        alert('HTML 파일이 없습니다.');
+        return;
+      }
+
+      // 생성된 HTML이 있으면 사용, 없으면 파일 읽기
+      if (generatedHtmlContent) {
+        showPreview(generatedHtmlContent);
+      } else if (htmlFile) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          generatedHtmlContent = e.target.result;
+          showPreview(generatedHtmlContent);
+        };
+        reader.readAsText(htmlFile);
+      }
+    }
+
+    function showPreview(htmlContent) {
+      document.getElementById('previewRendered').innerHTML = htmlContent;
+      document.getElementById('previewSource').value = htmlContent;
+      document.getElementById('previewModal').classList.remove('hidden');
+      switchPreviewMode('rendered');
+    }
+
+    function switchPreviewMode(mode) {
+      if (mode === 'rendered') {
+        document.getElementById('previewRendered').style.display = 'block';
+        document.getElementById('previewSource').style.display = 'none';
+      } else {
+        document.getElementById('previewRendered').style.display = 'none';
+        document.getElementById('previewSource').style.display = 'block';
+      }
+    }
+
+    function closePreviewModal(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById('previewModal').classList.add('hidden');
+    }
+
+    function downloadHtml() {
+      if (!generatedHtmlContent && !htmlFile) {
+        alert('다운로드할 HTML이 없습니다.');
+        return;
+      }
+
+      const content = generatedHtmlContent || '';
+      const blob = new Blob([content], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'generated.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
 
     if ('serviceWorker' in navigator) {
