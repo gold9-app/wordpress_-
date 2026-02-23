@@ -13,6 +13,8 @@ from pathlib import Path
 import requests as http_requests
 from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
+from elementor_helper import enable_elementor_for_post
+from elementor_helper_pro import enable_elementor_pro_layout
 
 load_dotenv()
 
@@ -26,6 +28,11 @@ SITE_NAME = os.getenv("SITE_NAME", "메디셜 공식 블로그")
 CATEGORY_ID = int(os.getenv("CATEGORY_ID", "22"))
 AUTHOR_ID = int(os.getenv("AUTHOR_ID", "4"))
 AUTHOR_INSTAGRAM = os.getenv("AUTHOR_INSTAGRAM", "https://www.instagram.com/medi_eungsuk/")
+
+# Elementor 설정
+USE_ELEMENTOR = os.getenv("USE_ELEMENTOR", "false").lower() == "true"
+ELEMENTOR_METHOD = os.getenv("ELEMENTOR_METHOD", "simple")  # simple, template, full
+ELEMENTOR_TEMPLATE_ID = int(os.getenv("ELEMENTOR_TEMPLATE_ID", "0")) if os.getenv("ELEMENTOR_TEMPLATE_ID") else None
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 
@@ -517,6 +524,37 @@ def api_publish():
             }, timeout=15,
         )
 
+        # Elementor 활성화 (옵션)
+        elementor_enabled = False
+        if USE_ELEMENTOR:
+            if ELEMENTOR_METHOD == "simple":
+                # 프로급 자동 레이아웃 사용
+                elementor_enabled = enable_elementor_pro_layout(
+                    post_id=post_id,
+                    title=title,
+                    html_content=html_content,
+                    image_url=image_url,
+                    wp_url=WP_URL,
+                    auth=(WP_USERNAME, WP_APP_PASSWORD),
+                    author_name="항노화 김응석 박사" if author_id == 4 else "메디셜 작성자",
+                    instagram_url=AUTHOR_INSTAGRAM,
+                )
+            else:
+                # 기존 방식 (template, full)
+                elementor_enabled = enable_elementor_for_post(
+                    post_id=post_id,
+                    html_content=html_content,
+                    wp_url=WP_URL,
+                    auth=(WP_USERNAME, WP_APP_PASSWORD),
+                    method=ELEMENTOR_METHOD,
+                    template_id=ELEMENTOR_TEMPLATE_ID,
+                )
+
+            if elementor_enabled:
+                print(f"  Elementor 프로급 레이아웃 적용 완료!")
+            else:
+                print(f"  [경고] Elementor 적용 실패")
+
         # 글 재저장하여 Rank Math 점수 재계산 트리거
         http_requests.post(
             f"{WP_URL}/wp-json/wp/v2/posts/{post_id}",
@@ -529,6 +567,7 @@ def api_publish():
             "post_id": post_id,
             "url": result["link"],
             "seo": seo,
+            "elementor_enabled": elementor_enabled,
         })
 
     finally:

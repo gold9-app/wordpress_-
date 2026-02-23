@@ -17,6 +17,8 @@ sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8")
 
 import requests
 from dotenv import load_dotenv
+from elementor_helper import enable_elementor_for_post
+from elementor_helper_pro import enable_elementor_pro_layout
 
 SCRIPT_DIR = Path(__file__).parent
 load_dotenv(SCRIPT_DIR / ".env")
@@ -24,6 +26,11 @@ load_dotenv(SCRIPT_DIR / ".env")
 WP_URL = os.getenv("WP_URL", "").rstrip("/")
 WP_USERNAME = os.getenv("WP_USERNAME", "")
 WP_APP_PASSWORD = os.getenv("WP_APP_PASSWORD", "")
+
+# Elementor 설정
+USE_ELEMENTOR = os.getenv("USE_ELEMENTOR", "false").lower() == "true"
+ELEMENTOR_METHOD = os.getenv("ELEMENTOR_METHOD", "simple")
+ELEMENTOR_TEMPLATE_ID = int(os.getenv("ELEMENTOR_TEMPLATE_ID", "0")) if os.getenv("ELEMENTOR_TEMPLATE_ID") else None
 
 PUBLISH_DIR = SCRIPT_DIR / "publish"
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
@@ -452,6 +459,37 @@ def publish_one(folder: Path, title: str, status: str):
     else:
         print(f"  [경고] Rank Math 스키마 설정 실패 (HTTP {schema_resp.status_code})")
         print(f"  응답: {schema_resp.text[:300]}")
+
+    # --- Elementor 활성화 (옵션) ---
+    if USE_ELEMENTOR:
+        print("  Elementor 프로급 레이아웃 적용 중...")
+        if ELEMENTOR_METHOD == "simple":
+            # 프로급 자동 레이아웃 사용
+            elementor_success = enable_elementor_pro_layout(
+                post_id=post_id,
+                title=title,
+                html_content=html_content,
+                image_url=image_url,
+                wp_url=WP_URL,
+                auth=(WP_USERNAME, WP_APP_PASSWORD),
+                author_name="항노화 김응석 박사",
+                instagram_url=CONFIG.get("author_instagram", ""),
+            )
+        else:
+            # 기존 방식 (template, full)
+            elementor_success = enable_elementor_for_post(
+                post_id=post_id,
+                html_content=html_content,
+                wp_url=WP_URL,
+                auth=(WP_USERNAME, WP_APP_PASSWORD),
+                method=ELEMENTOR_METHOD,
+                template_id=ELEMENTOR_TEMPLATE_ID,
+            )
+
+        if elementor_success:
+            print("  ✅ Elementor 프로급 레이아웃 적용 완료!")
+        else:
+            print("  ⚠️  Elementor 적용 실패 (글은 정상 발행됨)")
 
     print(f"  발행 완료! -> {result['link']}")
     return True
