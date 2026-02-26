@@ -375,8 +375,11 @@ def api_generate_html():
         return jsonify({"ok": False, "error": "Claude API 키가 설정되지 않았습니다."}), 500
 
     data = request.json
-    prompt = data.get("prompt", "").strip()
-    custom_instruction = data.get("custom_instruction", "").strip()
+    if not data:
+        return jsonify({"ok": False, "error": "잘못된 요청입니다. JSON 데이터를 보내주세요."}), 400
+
+    prompt = (data.get("prompt") or "").strip()
+    custom_instruction = (data.get("custom_instruction") or "").strip()
 
     if not prompt:
         return jsonify({"ok": False, "error": "요청사항을 입력해주세요."}), 400
