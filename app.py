@@ -566,6 +566,21 @@ def api_publish():
         html_content = ensure_focus_keyword_in_subheading(html_content, focus_keyword)
         if image_url:
             html_content = inject_focus_keyword_image(html_content, focus_keyword, image_url)
+
+        # 내부 링크 자동 선택 (입력 안 했으면 최신 글 1개 가져오기)
+        if not internal_link:
+            try:
+                recent_resp = http_requests.get(
+                    f"{WP_URL}/wp-json/wp/v2/posts",
+                    auth=(WP_USERNAME, WP_APP_PASSWORD),
+                    params={"per_page": 1, "orderby": "date", "order": "desc", "status": "publish"},
+                    timeout=10,
+                )
+                if recent_resp.status_code == 200 and recent_resp.json():
+                    internal_link = recent_resp.json()[0]["link"]
+            except:
+                pass  # 실패해도 무시 (내부 링크 없이 진행)
+
         html_content = inject_internal_link(html_content, internal_link)
         html_content = inject_external_link(html_content, author_id, external_link)
         wp_content = f"<!-- wp:html -->\n{html_content}\n<!-- /wp:html -->"
