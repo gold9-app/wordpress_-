@@ -385,11 +385,15 @@ def enable_elementor_pro_layout(
             post_date=post_date,
         )
 
-        # Elementor 메타 설정
+        # HTML 블록 제거 (Rank Math 분석용)
+        clean_content = html_content.replace("<!-- wp:html -->", "").replace("<!-- /wp:html -->", "").strip()
+
+        # Elementor 메타 설정 + post_content 유지 (Rank Math용)
         resp = requests.post(
             f"{wp_url}/wp-json/wp/v2/posts/{post_id}",
             auth=auth,
             json={
+                "content": clean_content,  # Rank Math가 분석할 수 있도록 HTML 블록 제거
                 "meta": {
                     "_elementor_edit_mode": "builder",
                     "_elementor_data": elementor_data,
