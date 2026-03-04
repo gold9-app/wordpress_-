@@ -381,7 +381,7 @@ CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건�
 @app.route("/api/generate-html", methods=["POST"])
 @require_auth
 def api_generate_html():
-    """Claude API로 HTML 생성 (스트리밍으로 즉시 첫 바이트 전송)"""
+    """Claude API로 HTML 생성 (keepalive 청크로 Railway 타임아웃 방지)"""
     if not CLAUDE_API_KEY:
         return jsonify({"ok": False, "error": "Claude API 키가 설정되지 않았습니다."}), 500
 
@@ -404,13 +404,15 @@ def api_generate_html():
     else:
         user_content = f"다음 주제로 건강 칼럼을 HTML 형식으로 작성해주세요:\n\n{prompt}"
 
-    def generate():
-        """스트리밍 제너레이터: 즉시 응답 시작하여 Railway 타임아웃 방지"""
-        try:
-            # 즉시 JSON 응답 헤더 전송 (Railway에 first-byte 전송)
-            yield '{"ok":true,"html":"'
+    import time
+    import threading
 
-            # 스트리밍 API 호출
+    result = {}
+    error_msg = {}
+
+    def call_claude():
+        """별도 스레드에서 Claude API 호출"""
+        try:
             resp = http_requests.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -427,42 +429,17 @@ def api_generate_html():
                             "role": "user",
                             "content": user_content
                         }
-                    ],
-                    "stream": True
+                    ]
                 },
                 timeout=300,
-                stream=True
             )
 
             if resp.status_code != 200:
-                yield f'"}},"error":"Claude API 오류 (HTTP {resp.status_code})"'
+                error_msg['text'] = f"Claude API 오류 (HTTP {resp.status_code})"
                 return
 
-            html_content = ""
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-
-                line_text = line.decode('utf-8')
-                if not line_text.startswith('data: '):
-                    continue
-
-                data_str = line_text[6:]
-                if data_str == '[DONE]':
-                    break
-
-                try:
-                    chunk = json.loads(data_str)
-                    if chunk.get('type') == 'content_block_delta':
-                        delta = chunk.get('delta', {})
-                        if delta.get('type') == 'text_delta':
-                            text = delta.get('text', '')
-                            html_content += text
-                            # JSON 이스케이핑하여 즉시 전송
-                            escaped_text = json.dumps(text)[1:-1]  # 따옴표 제거
-                            yield escaped_text
-                except json.JSONDecodeError:
-                    continue
+            response_data = resp.json()
+            html_content = response_data["content"][0]["text"]
 
             # HTML 코드블록 제거
             html_content = html_content.strip()
@@ -472,12 +449,29 @@ def api_generate_html():
                 html_content = html_content[3:]
             if html_content.endswith("```"):
                 html_content = html_content[:-3]
+            html_content = html_content.strip()
 
-            # JSON 응답 종료
-            yield '"}'
+            result['html'] = html_content
 
         except Exception as e:
-            yield f'"}},"error":"{str(e)}"'
+            error_msg['text'] = str(e)
+
+    # Claude 호출 스레드 시작
+    thread = threading.Thread(target=call_claude)
+    thread.start()
+
+    def generate():
+        """Railway keepalive: 줄바꿈으로 연결 유지 후 JSON 전송"""
+        # Claude 응답 대기하며 keepalive 전송 (줄바꿈)
+        while thread.is_alive():
+            yield ' '  # 공백으로 연결 유지
+            thread.join(timeout=3)
+
+        # 완료 후 JSON 전송
+        if error_msg:
+            yield json.dumps({"ok": False, "error": error_msg["text"]})
+        else:
+            yield json.dumps({"ok": True, "html": result["html"]})
 
     return Response(stream_with_context(generate()), content_type='application/json')
 

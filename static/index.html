@@ -668,7 +668,9 @@
             custom_instruction: customInstruction || null
           }),
         });
-        const data = await resp.json();
+        // keepalive 공백 제거 후 JSON 파싱
+        const text = await resp.text();
+        const data = JSON.parse(text.trim());
 
         if (data.ok) {
           // HTML을 File 객체로 변환
