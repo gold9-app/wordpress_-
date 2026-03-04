@@ -11,7 +11,7 @@ from functools import wraps
 from pathlib import Path
 
 import requests as http_requests
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response, stream_with_context
 from dotenv import load_dotenv
 from elementor_helper import enable_elementor_for_post
 from elementor_helper_pro import enable_elementor_pro_layout
@@ -283,12 +283,23 @@ def api_options():
             auth=(WP_USERNAME, WP_APP_PASSWORD),
             timeout=10,
         )
+        if authors_resp.status_code != 200:
+            return jsonify({
+                "ok": False,
+                "error": f"작성자 목록 조회 실패 (HTTP {authors_resp.status_code}): {authors_resp.text[:200]}"
+            }), 500
+
         categories_resp = http_requests.get(
             f"{WP_URL}/wp-json/wp/v2/categories",
             auth=(WP_USERNAME, WP_APP_PASSWORD),
             params={"per_page": 50},
             timeout=10,
         )
+        if categories_resp.status_code != 200:
+            return jsonify({
+                "ok": False,
+                "error": f"카테고리 목록 조회 실패 (HTTP {categories_resp.status_code}): {categories_resp.text[:200]}"
+            }), 500
 
         authors = [{"id": u["id"], "name": u["name"]} for u in authors_resp.json()]
         categories = [{"id": c["id"], "name": c["name"]} for c in categories_resp.json()]
@@ -303,7 +314,7 @@ def api_options():
             }
         })
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": f"옵션 로드 오류: {str(e)}"}), 500
 
 
 CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건강 칼럼을 작성하는 전문 의료 콘텐츠 작성자입니다.
@@ -370,7 +381,7 @@ CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건�
 @app.route("/api/generate-html", methods=["POST"])
 @require_auth
 def api_generate_html():
-    """Claude API로 HTML 생성 (조건부 커스텀 지침)"""
+    """Claude API로 HTML 생성 (스트리밍으로 즉시 첫 바이트 전송)"""
     if not CLAUDE_API_KEY:
         return jsonify({"ok": False, "error": "Claude API 키가 설정되지 않았습니다."}), 500
 
@@ -393,48 +404,82 @@ def api_generate_html():
     else:
         user_content = f"다음 주제로 건강 칼럼을 HTML 형식으로 작성해주세요:\n\n{prompt}"
 
-    try:
-        resp = http_requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": CLAUDE_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-20250514",
-                "max_tokens": 8000,
-                "system": system_prompt,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": user_content
-                    }
-                ]
-            },
-            timeout=300,
-        )
+    def generate():
+        """스트리밍 제너레이터: 즉시 응답 시작하여 Railway 타임아웃 방지"""
+        try:
+            # 즉시 JSON 응답 헤더 전송 (Railway에 first-byte 전송)
+            yield '{"ok":true,"html":"'
 
-        if resp.status_code != 200:
-            return jsonify({"ok": False, "error": f"Claude API 오류 (HTTP {resp.status_code})"}), 500
+            # 스트리밍 API 호출
+            resp = http_requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": CLAUDE_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 8000,
+                    "system": system_prompt,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": user_content
+                        }
+                    ],
+                    "stream": True
+                },
+                timeout=300,
+                stream=True
+            )
 
-        result = resp.json()
-        html_content = result["content"][0]["text"]
+            if resp.status_code != 200:
+                yield f'"}},"error":"Claude API 오류 (HTTP {resp.status_code})"'
+                return
 
-        # HTML 코드블록 제거 (혹시 있을 경우)
-        html_content = html_content.strip()
-        if html_content.startswith("```html"):
-            html_content = html_content[7:]
-        if html_content.startswith("```"):
-            html_content = html_content[3:]
-        if html_content.endswith("```"):
-            html_content = html_content[:-3]
-        html_content = html_content.strip()
+            html_content = ""
+            for line in resp.iter_lines():
+                if not line:
+                    continue
 
-        return jsonify({"ok": True, "html": html_content})
+                line_text = line.decode('utf-8')
+                if not line_text.startswith('data: '):
+                    continue
 
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+                data_str = line_text[6:]
+                if data_str == '[DONE]':
+                    break
+
+                try:
+                    chunk = json.loads(data_str)
+                    if chunk.get('type') == 'content_block_delta':
+                        delta = chunk.get('delta', {})
+                        if delta.get('type') == 'text_delta':
+                            text = delta.get('text', '')
+                            html_content += text
+                            # JSON 이스케이핑하여 즉시 전송
+                            escaped_text = json.dumps(text)[1:-1]  # 따옴표 제거
+                            yield escaped_text
+                except json.JSONDecodeError:
+                    continue
+
+            # HTML 코드블록 제거
+            html_content = html_content.strip()
+            if html_content.startswith("```html"):
+                html_content = html_content[7:]
+            if html_content.startswith("```"):
+                html_content = html_content[3:]
+            if html_content.endswith("```"):
+                html_content = html_content[:-3]
+
+            # JSON 응답 종료
+            yield '"}'
+
+        except Exception as e:
+            yield f'"}},"error":"{str(e)}"'
+
+    return Response(stream_with_context(generate()), content_type='application/json')
 
 
 @app.route("/api/publish", methods=["POST"])
