@@ -11,7 +11,7 @@ from functools import wraps
 from pathlib import Path
 
 import requests as http_requests
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response, stream_with_context
 from dotenv import load_dotenv
 from elementor_helper import enable_elementor_for_post
 from elementor_helper_pro import enable_elementor_pro_layout
@@ -283,12 +283,23 @@ def api_options():
             auth=(WP_USERNAME, WP_APP_PASSWORD),
             timeout=10,
         )
+        if authors_resp.status_code != 200:
+            return jsonify({
+                "ok": False,
+                "error": f"작성자 목록 조회 실패 (HTTP {authors_resp.status_code}): {authors_resp.text[:200]}"
+            }), 500
+
         categories_resp = http_requests.get(
             f"{WP_URL}/wp-json/wp/v2/categories",
             auth=(WP_USERNAME, WP_APP_PASSWORD),
             params={"per_page": 50},
             timeout=10,
         )
+        if categories_resp.status_code != 200:
+            return jsonify({
+                "ok": False,
+                "error": f"카테고리 목록 조회 실패 (HTTP {categories_resp.status_code}): {categories_resp.text[:200]}"
+            }), 500
 
         authors = [{"id": u["id"], "name": u["name"]} for u in authors_resp.json()]
         categories = [{"id": c["id"], "name": c["name"]} for c in categories_resp.json()]
@@ -303,7 +314,7 @@ def api_options():
             }
         })
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": f"옵션 로드 오류: {str(e)}"}), 500
 
 
 CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건강 칼럼을 작성하는 전문 의료 콘텐츠 작성자입니다.
@@ -313,6 +324,14 @@ CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건�
 - 대한줄기세포치료학회 회장
 - 국제미용항노화학회 회장
 - 대한비만건강학회 고문
+
+## 제목 작성 규칙 (필수)
+- **제목 길이**: 30자 이내 (공백 포함)
+- **숫자 포함**: 제목에 반드시 숫자를 포함해야 합니다 (예: "5가지", "10분", "3단계", "7개" 등)
+- **예시**:
+  - "간 건강 5가지 생활습관"
+  - "비타민D 부족 증상 7가지"
+  - "아침 운동 30분의 효과"
 
 ## 글 구조 (반드시 이 순서로 작성)
 
@@ -362,13 +381,16 @@ CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건�
 @app.route("/api/generate-html", methods=["POST"])
 @require_auth
 def api_generate_html():
-    """Claude API로 HTML 생성 (조건부 커스텀 지침)"""
+    """Claude API로 HTML 생성 (keepalive 청크로 Railway 타임아웃 방지)"""
     if not CLAUDE_API_KEY:
         return jsonify({"ok": False, "error": "Claude API 키가 설정되지 않았습니다."}), 500
 
     data = request.json
-    prompt = data.get("prompt", "").strip()
-    custom_instruction = data.get("custom_instruction", "").strip()
+    if not data:
+        return jsonify({"ok": False, "error": "잘못된 요청입니다. JSON 데이터를 보내주세요."}), 400
+
+    prompt = (data.get("prompt") or "").strip()
+    custom_instruction = (data.get("custom_instruction") or "").strip()
 
     if not prompt:
         return jsonify({"ok": False, "error": "요청사항을 입력해주세요."}), 400
@@ -382,48 +404,76 @@ def api_generate_html():
     else:
         user_content = f"다음 주제로 건강 칼럼을 HTML 형식으로 작성해주세요:\n\n{prompt}"
 
-    try:
-        resp = http_requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": CLAUDE_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-20250514",
-                "max_tokens": 8000,
-                "system": system_prompt,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": user_content
-                    }
-                ]
-            },
-            timeout=300,
-        )
+    import time
+    import threading
 
-        if resp.status_code != 200:
-            return jsonify({"ok": False, "error": f"Claude API 오류 (HTTP {resp.status_code})"}), 500
+    result = {}
+    error_msg = {}
 
-        result = resp.json()
-        html_content = result["content"][0]["text"]
+    def call_claude():
+        """별도 스레드에서 Claude API 호출"""
+        try:
+            resp = http_requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": CLAUDE_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "max_tokens": 8000,
+                    "system": system_prompt,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": user_content
+                        }
+                    ]
+                },
+                timeout=300,
+            )
 
-        # HTML 코드블록 제거 (혹시 있을 경우)
-        html_content = html_content.strip()
-        if html_content.startswith("```html"):
-            html_content = html_content[7:]
-        if html_content.startswith("```"):
-            html_content = html_content[3:]
-        if html_content.endswith("```"):
-            html_content = html_content[:-3]
-        html_content = html_content.strip()
+            if resp.status_code != 200:
+                error_msg['text'] = f"Claude API 오류 (HTTP {resp.status_code})"
+                return
 
-        return jsonify({"ok": True, "html": html_content})
+            response_data = resp.json()
+            html_content = response_data["content"][0]["text"]
 
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+            # HTML 코드블록 제거
+            html_content = html_content.strip()
+            if html_content.startswith("```html"):
+                html_content = html_content[7:]
+            if html_content.startswith("```"):
+                html_content = html_content[3:]
+            if html_content.endswith("```"):
+                html_content = html_content[:-3]
+            html_content = html_content.strip()
+
+            result['html'] = html_content
+
+        except Exception as e:
+            error_msg['text'] = str(e)
+
+    # Claude 호출 스레드 시작
+    thread = threading.Thread(target=call_claude)
+    thread.start()
+
+    def generate():
+        """Railway keepalive: 줄바꿈으로 연결 유지 후 JSON 전송"""
+        # Claude 응답 대기하며 keepalive 전송 (줄바꿈)
+        while thread.is_alive():
+            yield ' '  # 공백으로 연결 유지
+            thread.join(timeout=3)
+
+        # 완료 후 JSON 전송
+        if error_msg:
+            yield json.dumps({"ok": False, "error": error_msg["text"]})
+        else:
+            yield json.dumps({"ok": True, "html": result["html"]})
+
+    return Response(stream_with_context(generate()), content_type='application/json')
 
 
 @app.route("/api/publish", methods=["POST"])
