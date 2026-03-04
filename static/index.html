@@ -289,9 +289,17 @@
         <!-- 내부 링크 -->
         <div class="form-group">
           <label class="form-label">내부 링크 (선택사항)</label>
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input type="text" class="form-input" id="internalLinkSearch"
+                   placeholder="이전 글 검색..." style="flex:1;">
+            <button type="button" class="btn btn-secondary" onclick="searchPosts()" style="white-space:nowrap;">검색</button>
+          </div>
+          <select class="form-select" id="internalLinkSelect" style="margin-bottom:8px; display:none;">
+            <option value="">-- 글 선택 --</option>
+          </select>
           <input type="text" class="form-input" id="internalLinkInput"
-                 placeholder="예: https://blog.meditial.co.kr/your-post/">
-          <div style="font-size:11px; color:#888; margin-top:4px;">기존 발행 글 URL을 입력하면 본문에 링크가 삽입됩니다</div>
+                 placeholder="또는 직접 URL 입력" readonly>
+          <div style="font-size:11px; color:#888; margin-top:4px;">위에서 검색하여 글을 선택하거나 직접 URL을 입력하세요</div>
         </div>
 
         <!-- HTML 파일 -->
@@ -473,6 +481,45 @@
         authorSel.innerHTML = '<option value="">네트워크 오류</option>';
         catSel.innerHTML = '<option value="">네트워크 오류</option>';
         alert(`서버 연결 실패:\n${e.message}\n\n서버가 실행 중인지 확인해주세요.`);
+      }
+    }
+
+    // --- 글 검색 (내부 링크용) ---
+    async function searchPosts() {
+      const search = document.getElementById('internalLinkSearch').value.trim();
+      const selectEl = document.getElementById('internalLinkSelect');
+
+      if (!search) {
+        alert('검색어를 입력해주세요.');
+        return;
+      }
+
+      try {
+        const resp = await fetch(`/api/posts?search=${encodeURIComponent(search)}`, {
+          headers: { 'X-App-Password': getPassword() }
+        });
+        const data = await resp.json();
+
+        if (!data.ok) {
+          alert(`글 검색 실패:\n${data.error}`);
+          return;
+        }
+
+        if (data.posts.length === 0) {
+          alert('검색 결과가 없습니다.');
+          return;
+        }
+
+        // 드롭다운 업데이트
+        selectEl.innerHTML = '<option value="">-- 글 선택 --</option>' +
+          data.posts.map(p => `<option value="${p.link}">${p.title} (${new Date(p.date).toLocaleDateString()})</option>`).join('');
+        selectEl.style.display = 'block';
+        selectEl.onchange = function() {
+          document.getElementById('internalLinkInput').value = this.value;
+        };
+      } catch (e) {
+        console.error('글 검색 실패', e);
+        alert(`글 검색 오류:\n${e.message}`);
       }
     }
 

@@ -320,6 +320,45 @@ def api_options():
         return jsonify({"ok": False, "error": f"옵션 로드 오류: {str(e)}"}), 500
 
 
+@app.route("/api/posts")
+@require_auth
+def api_posts():
+    """WordPress 글 목록 조회 (내부 링크용)"""
+    try:
+        search = request.args.get("search", "")
+        params = {
+            "per_page": 20,
+            "orderby": "date",
+            "order": "desc",
+            "status": "publish",
+        }
+        if search:
+            params["search"] = search
+
+        resp = http_requests.get(
+            f"{WP_URL}/wp-json/wp/v2/posts",
+            auth=(WP_USERNAME, WP_APP_PASSWORD),
+            params=params,
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return jsonify({"ok": False, "error": f"글 목록 조회 실패 (HTTP {resp.status_code})"}), 500
+
+        posts = [
+            {
+                "id": p["id"],
+                "title": p["title"]["rendered"],
+                "link": p["link"],
+                "date": p["date"],
+            }
+            for p in resp.json()
+        ]
+
+        return jsonify({"ok": True, "posts": posts})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"글 목록 조회 오류: {str(e)}"}), 500
+
+
 CLAUDE_SYSTEM_PROMPT = """당신은 "항노화 김응석 박사" 명의로 건강 칼럼을 작성하는 전문 의료 콘텐츠 작성자입니다.
 
 ## 작성자 정보
