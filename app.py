@@ -72,8 +72,9 @@ def extract_focus_keyword(title):
     keyword = re.sub(r"\d+\s*가지", "", keyword)
     remove_patterns = [
         "에 대해 잘못 알려진", "에 대해 알려진", "에 대해 알아야 할",
+        "에 관해 잘못 알려진", "에 관해 알려진", "에 관해 알아야 할",
         "꼭 알아야 할", "알아야 할", "꼭 알아야할", "반드시 알아야 할",
-        "에 대해", "에 대한", "에서의", "에서", "으로의", "으로", "를 위한", "을 위한",
+        "에 대해", "에 대한", "에 관해", "에 관한", "에서의", "에서", "으로의", "으로", "를 위한", "을 위한",
         "하는 방법", "하는 법", "하는법", "알아보기", "알아보자",
         "상식", "방법", "효과", "원인", "증상", "종류", "차이", "차이점",
         "비교", "추천", "정리", "총정리", "리뷰", "후기",
@@ -139,7 +140,9 @@ def ensure_focus_keyword_in_content(html_content, focus_keyword):
     plain_start = strip_html(html_content[:500])
     if focus_keyword.lower() in plain_start.lower():
         return html_content
-    return f"<p>{focus_keyword}에 대해 알아보겠습니다.</p>\n" + html_content
+    # 키워드 끝에 조사(에, 을, 를, 이, 가) 있으면 제거
+    clean_keyword = re.sub(r'[에을를이가]$', '', focus_keyword)
+    return f"<p>{clean_keyword}에 대해 알아보겠습니다.</p>\n" + html_content
 
 
 def ensure_focus_keyword_in_subheading(html_content, focus_keyword):
