@@ -160,13 +160,13 @@ def create_pro_elementor_layout(
                                 "html": f"""
 <style>
 /* 본문 스타일링 */
-.elementor-widget-html {{
+.article-content {{
     font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
     color: #333333;
     line-height: 1.8;
 }}
 
-.elementor-widget-html h2 {{
+.article-content h2 {{
     font-size: 24px;
     font-weight: 700;
     color: #1a73e8;
@@ -175,7 +175,7 @@ def create_pro_elementor_layout(
     line-height: 1.4;
 }}
 
-.elementor-widget-html h3 {{
+.article-content h3 {{
     font-size: 20px;
     font-weight: 600;
     color: #333333;
@@ -183,56 +183,58 @@ def create_pro_elementor_layout(
     margin-bottom: 14px;
 }}
 
-.elementor-widget-html p {{
+.article-content p {{
     font-size: 16px;
     margin-bottom: 16px;
     line-height: 1.8;
 }}
 
-.elementor-widget-html ul, .elementor-widget-html ol {{
+.article-content ul, .article-content ol {{
     margin-left: 20px;
     margin-bottom: 20px;
 }}
 
-.elementor-widget-html li {{
+.article-content li {{
     margin-bottom: 8px;
 }}
 
-.elementor-widget-html img {{
+.article-content img {{
     max-width: 100%;
     height: auto;
     border-radius: 8px;
     margin: 20px 0;
 }}
 
-.elementor-widget-html a {{
+.article-content a {{
     color: #1a73e8;
     text-decoration: none;
     border-bottom: 1px solid #1a73e8;
 }}
 
-.elementor-widget-html a:hover {{
+.article-content a:hover {{
     color: #0d47a1;
     border-bottom-color: #0d47a1;
 }}
 
 /* 모바일 반응형 */
 @media (max-width: 768px) {{
-    .elementor-widget-html h2 {{
+    .article-content h2 {{
         font-size: 20px;
         margin-top: 30px;
     }}
-    .elementor-widget-html h3 {{
+    .article-content h3 {{
         font-size: 18px;
         margin-top: 24px;
     }}
-    .elementor-widget-html p {{
+    .article-content p {{
         font-size: 15px;
     }}
 }}
 </style>
 
+<div class="article-content">
 {clean_html}
+</div>
                                 """,
                             },
                         }
