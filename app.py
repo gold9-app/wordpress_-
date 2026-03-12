@@ -110,7 +110,7 @@ def inject_external_link(html_content, author_id, custom_link=""):
             return html_content
         link_html = (
             f'<p>더 많은 건강 정보는 '
-            f'<a href="{AUTHOR_INSTAGRAM}" target="_blank">응석 김 인스타그램</a>'
+            f'<a href="{AUTHOR_INSTAGRAM}" target="_blank">김응석 인스타그램</a>'
             f'에서 확인하세요.</p>'
         )
         return html_content + "\n" + link_html
@@ -126,12 +126,13 @@ def inject_external_link(html_content, author_id, custom_link=""):
         return html_content + "\n" + link_html
 
 
-def inject_internal_link(html_content, internal_link):
+def inject_internal_link(html_content, internal_link, internal_link_title=""):
     """내부 링크를 글 맨 마지막에 삽입"""
     if not internal_link:
         return html_content
+    link_text = internal_link_title if internal_link_title else "👉 관련 글 보러가기"
     link_html = (
-        f'<p>또 보면 좋은 글: <a href="{internal_link}">{internal_link}</a></p>'
+        f'<p>또 보면 좋은 글: <a href="{internal_link}">{link_text}</a></p>'
     )
     return html_content + "\n" + link_html
 
@@ -568,6 +569,7 @@ def api_publish():
             html_content = inject_focus_keyword_image(html_content, focus_keyword, image_url)
 
         # 내부 링크 자동 선택 (입력 안 했으면 최신 글 1개 가져오기)
+        internal_link_title = ""
         if not internal_link:
             try:
                 recent_resp = http_requests.get(
@@ -577,11 +579,13 @@ def api_publish():
                     timeout=10,
                 )
                 if recent_resp.status_code == 200 and recent_resp.json():
-                    internal_link = recent_resp.json()[0]["link"]
+                    recent_post = recent_resp.json()[0]
+                    internal_link = recent_post["link"]
+                    internal_link_title = recent_post.get("title", {}).get("rendered", "")
             except:
                 pass  # 실패해도 무시 (내부 링크 없이 진행)
 
-        html_content = inject_internal_link(html_content, internal_link)
+        html_content = inject_internal_link(html_content, internal_link, internal_link_title)
         html_content = inject_external_link(html_content, author_id, external_link)
         wp_content = f"<!-- wp:html -->\n{html_content}\n<!-- /wp:html -->"
 

@@ -104,7 +104,7 @@ def inject_external_link(html_content: str) -> str:
         return html_content
     link_html = (
         f'<p>더 많은 건강 정보는 '
-        f'<a href="{instagram_url}" target="_blank">응석 김 인스타그램</a>'
+        f'<a href="{instagram_url}" target="_blank">김응석 인스타그램</a>'
         f'에서 확인하세요.</p>'
     )
     return html_content + "\n" + link_html
